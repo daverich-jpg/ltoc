@@ -27,3 +27,29 @@ const rows = [
   ['stepper text-4 future step (decorative)', hex('#a39e98'), W, 2.5],
 ]
 for (const [n, f, b, min] of rows) { const r = ratio(f, b); console.log((r >= min ? 'PASS' : 'FAIL').padEnd(5), r.toFixed(2).padStart(5), `(need ${min})`, n) }
+
+// ---- Dark theme ----
+console.log('\n-- dark --')
+const D = hex('#202020'), DB = hex('#191919'), DL = hex('#1c1c1c'), DR = hex('#3a3a3a')
+const dtint = (h, a, bg = D) => over(hex(h), a, bg)
+const drows = [
+  ['text-2 on bg', hex('#d4d4d4'), DB, 4.5],
+  ['muted text-3 on surface', hex('#a3a3a3'), D, 4.5],
+  ['accent-ink on surface', hex('#6cb2f5'), D, 4.5],
+  ['white on primary button', hex('#ffffff'), hex('#1f74c9'), 4.5],
+  ['act-ink on act tint', hex('#ff9a5c'), dtint('#ff7a2e', 0.14), 4.5],
+  ['watch on watch tint', hex('#c9a6f2'), dtint('#c9a6f2', 0.14), 4.5],
+  ['ok-ink on ok tint', hex('#5fd47c'), dtint('#3bbf5a', 0.14), 4.5],
+  ['sim-ink on sim tint', hex('#5fd0cb'), dtint('#3dbab5', 0.14), 4.5],
+  ['assumed on surface', hex('#d1a878'), D, 4.5],
+  ['indigo AI marker on its tint', hex('#9aa6f0'), dtint('#9aa6f0', 0.14), 4.5],
+  ['act glyph vs surface', hex('#ff7a2e'), D, 3],
+  ['watch glyph vs surface', hex('#c9a6f2'), D, 3],
+  ['ok bar vs surface', hex('#3bbf5a'), D, 3],
+  ['heavy traffic vs dark road', hex('#e8409f'), DR, 3],
+  ['standstill vs dark road', hex('#ff8ccf'), DR, 3],
+  ['slow traffic vs dark road (width also carries it)', hex('#8c3f70'), DR, 1.2],
+  ['map label text-3 on land', hex('#a3a3a3'), DL, 4.5],
+  ['diversion vs land', hex('#9aa6f0'), DL, 3],
+]
+for (const [n, f, b, min] of drows) { const r = ratio(f, b); console.log((r >= min ? 'PASS' : 'FAIL').padEnd(5), r.toFixed(2).padStart(5), `(need ${min})`, n) }

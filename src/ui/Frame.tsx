@@ -7,6 +7,7 @@ import { AGENCIES } from '../sim/seed'
 import type { AgencyId, Incident, Role, Tier } from '../sim/types'
 import { Age, Icon, Kbd, StateChip, TierGlyph, fmtAge, fmtTime } from './bits'
 import { getUI, go, openIncident, setUI, useSim, useUI, type Module } from './store'
+import { toggleTheme, useTheme, currentTheme } from './theme'
 
 export function TopBar() {
   const S = useSim()
@@ -26,6 +27,7 @@ export function TopBar() {
       <div className="spacer" />
       <SearchField />
       <div className="spacer" />
+      <ThemeToggle />
       <SeatMenu />
       <div style={{ position: 'relative' }}>
         <button className="btn sm" aria-expanded={U.scenarioOpen} onClick={() => setUI({ scenarioOpen: !U.scenarioOpen })}>
@@ -71,6 +73,22 @@ function SearchField() {
       <Icon.search />
       <span className="ph">Search incidents, units, roads</span>
       <kbd>⌘K</kbd>
+    </button>
+  )
+}
+
+const Sun = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" /></svg>
+const Moon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden><path d="M13.5 9.6A5.5 5.5 0 0 1 6.4 2.5a5.5 5.5 0 1 0 7.1 7.1Z" /></svg>
+/** Shows the theme you'd switch TO. Icons cross-fade with scale and blur rather than swapping. */
+function ThemeToggle() {
+  const theme = useTheme()
+  const next = theme === 'dark' ? 'light' : 'dark'
+  const v = { initial: { opacity: 0, scale: 0.25, filter: 'blur(4px)' }, animate: { opacity: 1, scale: 1, filter: 'blur(0px)' }, exit: { opacity: 0, scale: 0.25, filter: 'blur(4px)' } }
+  return (
+    <button className="theme-btn" onClick={toggleTheme} aria-label={`Switch to ${next} mode`} title={`Switch to ${next} mode`}>
+      <AnimatePresence initial={false}>
+        <motion.span key={theme} {...v} transition={{ type: 'spring', duration: 0.3, bounce: 0 }}>{theme === 'dark' ? <Sun /> : <Moon />}</motion.span>
+      </AnimatePresence>
     </button>
   )
 }
@@ -249,6 +267,7 @@ export function Palette() {
     for (const n of NAV) out.push({ id: 'go-' + n.id, label: `Go to ${n.label}`, type: 'Action', run: () => go(n.id) })
     out.push({ id: 'go-flows', label: 'Go to Flows & states', type: 'Action', run: () => go('flows') })
     for (const sc of ['S1', 'S2', 'S3'] as const) out.push({ id: 'sc' + sc, label: `Start scenario ${sc}`, type: 'Action', run: () => E.startScenario(sc) })
+    out.push({ id: 'theme', label: `Switch to ${currentTheme() === 'dark' ? 'light' : 'dark'} mode`, type: 'Action', run: toggleTheme })
     out.push({ id: 'role-s', label: 'Switch to supervisor seat', type: 'Action', run: () => E.setRole('supervisor') })
     out.push({ id: 'role-o', label: 'Switch to operator seat', type: 'Action', run: () => E.setRole('operator') })
     return out

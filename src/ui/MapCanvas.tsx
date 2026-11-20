@@ -166,7 +166,7 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
           const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
           return <g key={sg.id} opacity={dimSeg(sg.id)}>
             <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--act)" strokeWidth={2} strokeDasharray="1 5" strokeLinecap="round" />
-            <g transform={`translate(${mx} ${my})`}><rect x={-14} y={-7} width={28} height={14} rx={3} fill="var(--act)" /><text x={0} y={3.5} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#fff" fontFamily="var(--mono)">CLOSED</text></g>
+            <g transform={`translate(${mx} ${my})`}><rect x={-14} y={-7} width={28} height={14} rx={3} fill="var(--act)" /><text x={0} y={3.5} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="var(--on-solid)" fontFamily="var(--mono)">CLOSED</text></g>
           </g>
         })}
 
