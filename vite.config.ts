@@ -19,5 +19,12 @@ export default defineConfig(({ mode }) => {
   // Server-only secret from .env.local; never exposed to the client bundle.
   const env = loadEnv(mode, process.cwd(), '')
   if (env.ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY
-  return { plugins: [react(), aiApi()], base: './', server: { port: 5400, strictPort: true } }
+  return {
+    plugins: [react(), aiApi()], base: './', server: { port: 5400, strictPort: true },
+    // Libraries change far less often than app code: separate chunks cache across deploys and keep each file small.
+    build: { rollupOptions: { output: { manualChunks(id: string) {
+      if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react'
+      if (/node_modules\/(framer-motion|motion-dom|motion-utils)\//.test(id)) return 'motion'
+    } } } },
+  }
 })

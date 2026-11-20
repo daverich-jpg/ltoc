@@ -2,7 +2,7 @@
 // state bars on top, one bar per unit, and small icon markers for everything else.
 // The detail lives in a hover/focus card, so the track itself stays quiet.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Ambulance, ArrowsSplit, BellRinging, Broadcast, Car, ClipboardText, FireTruck, Flag, Lifebuoy, Megaphone, NotePencil, Siren, Sparkle, Truck, WarningCircle, Lightning } from '@phosphor-icons/react'
+import { Ambulance, ArrowsSplit, BellRinging, Broadcast, Car, ClipboardText, FireTruck, Flag, Lifebuoy, Megaphone, NotePencil, Siren, Sparkle, Truck, WarningCircle, Lightning } from './icons'
 import type { Incident, TimelineEvent, UnitType } from '../sim/types'
 import { lastConf } from '../sim/derive'
 import { fmtTime } from './bits'

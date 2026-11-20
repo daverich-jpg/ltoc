@@ -8,7 +8,7 @@ import type { AgencyId, Incident, Role, Tier } from '../sim/types'
 import { Age, Icon, Kbd, StateChip, TierGlyph, fmtAge, fmtTime } from './bits'
 import { getUI, go, openIncident, setUI, useSim, useUI, type Module } from './store'
 import { toggleTheme, useTheme, currentTheme } from './theme'
-import { Sun as PhSun, Moon as PhMoon } from '@phosphor-icons/react'
+import { Sun as PhSun, Moon as PhMoon } from './icons'
 
 export function TopBar() {
   const S = useSim()

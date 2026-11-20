@@ -10,7 +10,7 @@ import { closeIncident, getUI, openIncident, setUI, useSim, useUI } from './stor
 import type { State } from '../sim/engine'
 import { draftMessage, readReports } from '../ai/client'
 import { TimelineTrack } from './Timeline'
-import { NotePencil, Sparkle } from '@phosphor-icons/react'
+import { NotePencil, Sparkle } from './icons'
 import type { AIResult, MessageDraft, MessageFacts, ReportRead } from '../ai/types'
 
 type Sec = 'verify' | 'assess' | 'response' | 'clear' | 'close' | 'timeline'
