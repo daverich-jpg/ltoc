@@ -430,31 +430,40 @@ function ClearSection({ inc, lead }: { inc: Incident; lead: boolean }) {
           : <Cmd inc={inc} prefix="Lift diversion" kind={inc.state === 'Road clear' ? 'primary' : ''} onClick={() => E.liftDiversion(inc.id)} disabled={lia}>Lift</Cmd>)}
       </div>}
       {(msg || !done) && <div className="clear-msg">
-        <div className="label">Public message {msg && <span className={`chip ${msg.status === 'published' ? 'accent' : 'outline'}`} style={{ marginLeft: 4 }}>{msg.status}</span>}
-          {!done && !lia && msg?.status !== 'published' && (msg || draft !== null) && !ai.loading && <button className="btn ghost sm ai-redo" onClick={runAI}><Spark /> {ai.res ? 'Redraft' : 'Draft with AI'}</button>}
-        </div>
-        {ai.loading ? <div className="ai-loading"><div className="skel" style={{ height: 14, width: '92%' }} /><div className="skel" style={{ height: 14, width: '70%' }} /><span className="small muted"><Spark /> Drafting from the confirmed facts…</span></div>
-        : !msg && draft === null ? <div className="actions" style={{ marginTop: 0 }}>
-            <button className="btn ai" disabled={done || lia} onClick={runAI}><Spark /> Draft with AI</button>
-            <button className="btn ghost sm" disabled={done || lia} onClick={() => setDraft('')}>Write it yourself</button>
-          </div> : <>
-          {ai.res && draft !== null && <motion.div className="ai-meta" initial={{ opacity: 0, filter: 'blur(2px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
-            <AIBadge mode={ai.res.mode} edited={ai.edited} />
-            <div className="seg" role="group" aria-label="Language">
-              {(['english', 'pidgin', 'yoruba'] as const).map(l => <button key={l} aria-pressed={ai.lang === l} disabled={!ai.res!.data[l]} title={!ai.res!.data[l] ? (ai.res!.mode === 'demo' ? 'Yoruba needs live AI and a fluent reviewer' : 'Not confident enough to draft Yoruba') : undefined} onClick={() => pickLang(l)}>{l[0].toUpperCase() + l.slice(1)}</button>)}
+        <div className="label">Public message {msg && <span className={`chip ${msg.status === 'published' ? 'accent' : 'outline'}`} style={{ marginLeft: 4 }}>{msg.status}</span>}</div>
+        {msg && (msg.status === 'published' || done) ? <p className="msg-read">{msg.text}</p> : (
+          <div className={`composer ${lia ? 'is-disabled' : ''}`} onClick={e => { if ((e.target as HTMLElement).classList.contains('composer')) (e.currentTarget.querySelector('textarea') as HTMLTextAreaElement | null)?.focus() }}>
+            {ai.res && draft !== null && !ai.loading && <motion.div className="ai-meta" initial={{ opacity: 0, filter: 'blur(2px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
+              <AIBadge mode={ai.res.mode} edited={ai.edited} />
+              <div className="seg" role="group" aria-label="Language">
+                {(['english', 'pidgin', 'yoruba'] as const).map(l => <button key={l} aria-pressed={ai.lang === l} disabled={!ai.res!.data[l]} title={!ai.res!.data[l] ? (ai.res!.mode === 'demo' ? 'Yoruba needs live AI and a fluent reviewer' : 'Not confident enough to draft Yoruba') : undefined} onClick={() => pickLang(l)}>{l[0].toUpperCase() + l.slice(1)}</button>)}
+              </div>
+              <span className="small muted">Used: {ai.res.data.used.join(', ')}</span>
+            </motion.div>}
+            {ai.loading
+              ? <div className="ai-loading composer-loading"><div className="skel" style={{ height: 14, width: '92%' }} /><div className="skel" style={{ height: 14, width: '64%' }} /><span className="small"><Spark /> Drafting from the confirmed facts…</span></div>
+              : <motion.textarea key={ai.res ? `ai-${ai.lang}` : 'own'} className="composer-input" rows={3} disabled={lia}
+                  initial={ai.res ? { opacity: 0, filter: 'blur(2px)' } : false} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  value={draft ?? msg?.text ?? ''} placeholder="Tell drivers what’s happening and which way to go…" aria-label="Public message"
+                  onChange={e => { setDraft(e.target.value); if (ai.res) setAi(a => ({ ...a, edited: true })) }} />}
+            {ai.res && draft !== null && ai.res.data.caution && !ai.loading && <p className="small composer-caution">{ai.res.data.caution}</p>}
+            <div className="composer-bar">
+              <button className="btn ghost sm ai-btn" onClick={runAI} disabled={lia || ai.loading}><Spark /> {ai.res || msg ? 'Redraft with AI' : 'Draft with AI'}</button>
+              <span className="spacer" style={{ flex: 1 }} />
+              {draft !== null && ai.res && !ai.loading && <button className="btn ghost sm" onClick={() => { setDraft(null); setAi(a => ({ ...a, res: undefined })) }}>Discard</button>}
+              {(() => {
+                const text = (draft ?? '').trim()
+                const changed = draft !== null && text !== '' && draft !== msg?.text
+                return <Cmd inc={inc} prefix="Save message" kind="primary" disabled={!changed || lia || ai.loading} onClick={() => saveDraft(draft!)}>{ai.res && changed ? 'Use this draft' : msg ? 'Save changes' : 'Save draft'}</Cmd>
+              })()}
             </div>
-            <span className="small muted">Used: {ai.res.data.used.join(', ')}</span>
-          </motion.div>}
-          {ai.res && draft !== null && ai.res.data.caution && <p className="small" style={{ color: 'var(--act-ink)', margin: '0 0 6px' }}>{ai.res.data.caution}</p>}
-          <textarea value={draft ?? msg?.text ?? ''} onChange={e => { setDraft(e.target.value); if (ai.res) setAi(a => ({ ...a, edited: true })) }} readOnly={msg?.status === 'published' || done} rows={3} aria-label="Public message" />
-          {!done && <div className="actions" style={{ marginTop: 6 }}>
-            {draft !== null && draft !== msg?.text && <Cmd inc={inc} prefix="Save message" kind={ai.res ? 'primary' : ''} onClick={() => saveDraft(draft)}>{ai.res ? 'Use this draft' : 'Save'}</Cmd>}
-            {draft !== null && ai.res && <button className="btn ghost sm" onClick={() => { setDraft(null); setAi(a => ({ ...a, res: undefined })) }}>Discard</button>}
-            {msg?.status === 'draft' && draft === null && (sup ? <Cmd inc={inc} prefix="Approve public" kind="primary" onClick={() => E.approveMessage(inc.id, msg.id)}>Approve</Cmd> : <SwitchToSupervisor />)}
-            {msg?.status === 'approved' && <Cmd inc={inc} prefix="Publish" kind="primary" onClick={() => E.publishMessage(inc.id, msg.id)} disabled={lia}>Publish</Cmd>}
-            {msg?.status === 'published' && <Cmd inc={inc} prefix="Withdraw" kind={inc.state === 'Road clear' ? 'primary' : ''} onClick={() => E.withdrawMessage(inc.id, msg.id)}>Withdraw</Cmd>}
-          </div>}
-        </>}
+          </div>
+        )}
+        {!done && msg && draft === null && <div className="actions" style={{ marginTop: 8 }}>
+          {msg.status === 'draft' && (sup ? <Cmd inc={inc} prefix="Approve public" kind="primary" onClick={() => E.approveMessage(inc.id, msg.id)}>Approve</Cmd> : <SwitchToSupervisor />)}
+          {msg.status === 'approved' && <Cmd inc={inc} prefix="Publish" kind="primary" onClick={() => E.publishMessage(inc.id, msg.id)} disabled={lia}>Publish</Cmd>}
+          {msg.status === 'published' && <Cmd inc={inc} prefix="Withdraw" kind={inc.state === 'Road clear' ? 'primary' : ''} onClick={() => E.withdrawMessage(inc.id, msg.id)}>Withdraw</Cmd>}
+        </div>}
       </div>}
       <Pendings inc={inc} prefixes={['Request', 'Approve', 'Lift', 'Save message', 'Publish', 'Withdraw', 'Adapt']} />
     </Section>

@@ -506,3 +506,21 @@ select option { color: var(--text); }
 .tl li.k-note { background: var(--note-bg); border-radius: var(--r-sm); border-top-color: transparent; padding-left: 6px; padding-right: 6px; }
 .tl li.k-note .txt { color: var(--note-ink); font-style: normal; }
 .tl li.k-note .when, .tl li.k-note .who { color: var(--note-ink); opacity: 0.75; }
+
+/* public message composer: a filled field with its own toolbar.
+   Concentric radii: box 12px = button 8px + 4px inset. */
+.composer { display: flex; flex-direction: column; border-radius: var(--r-lg); background: var(--bg); box-shadow: inset 0 0 0 1px var(--field-line); cursor: text; transition-property: box-shadow, background-color; transition-duration: 120ms; transition-timing-function: var(--ease-ui); }
+@media (hover: hover) and (pointer: fine) { .composer:hover:not(:focus-within) { box-shadow: inset 0 0 0 1px var(--road-casing); } }
+.composer:focus-within { background: var(--surface); box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-bg); }
+.composer.is-disabled { opacity: 0.6; cursor: not-allowed; }
+.composer .ai-meta { padding: 10px 12px 0; margin: 0; }
+textarea.composer-input { background: transparent; box-shadow: none !important; border-radius: 0; padding: 10px 12px 6px; min-height: 76px; resize: none; font-size: 14px; line-height: 1.5; }
+textarea.composer-input:focus { outline: none; }
+.composer-loading { padding: 12px 12px 6px; }
+.composer-caution { margin: 0; padding: 0 12px 4px; color: var(--act-ink); }
+.composer-bar { display: flex; align-items: center; gap: 6px; padding: 4px; }
+.composer-bar .btn { border-radius: var(--r-md); }
+.composer-bar .btn.primary { border-radius: var(--r-md); padding: 0 12px; }
+.ai-btn { color: var(--indigo); }
+.ai-btn svg { color: var(--indigo); }
+.msg-read { margin: 0; padding: 10px 12px; border-radius: var(--r-lg); background: var(--bg); font-size: 14px; line-height: 1.5; }
