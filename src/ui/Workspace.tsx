@@ -9,6 +9,7 @@ import { Age, Assumed, Icon, Kbd, Sim, SourceIcon, StateChip, TierGlyph, fmtAge,
 import { closeIncident, getUI, openIncident, setUI, useSim, useUI } from './store'
 import type { State } from '../sim/engine'
 import { draftMessage, readReports } from '../ai/client'
+import { TimelineTrack } from './Timeline'
 import type { AIResult, MessageDraft, MessageFacts, ReportRead } from '../ai/types'
 
 type Sec = 'verify' | 'assess' | 'response' | 'clear' | 'close' | 'timeline'
@@ -512,13 +513,13 @@ function TimelineSection({ inc, lead }: { inc: Incident; lead: boolean }) {
   const shown = audit ? evs : evs.filter(e => e.kind !== 'notify' || /acknowledged/.test(e.text) === false)
   return (
     <Section id="timeline" inc={inc} title="Timeline" summary={`${inc.timeline.length} events · last ${fmtAge(S.now - (inc.timeline.at(-1)?.at ?? S.now))} ago`} lead={lead}>
-      {S.role === 'supervisor' && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><button className="btn ghost sm" aria-pressed={audit} onClick={() => setAudit(!audit)}>{audit ? 'Hide audit detail' : 'Audit view'}</button></div>}
-      <ul className="tl">
+      {S.role === 'supervisor' && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><button className="btn ghost sm" aria-pressed={audit} onClick={() => setAudit(!audit)}>{audit ? 'Back to timeline' : 'Audit log'}</button></div>}
+      {audit ? <ul className="tl">
         {shown.map(e => <li key={e.id} className={`k-${e.kind}`}>
           <span className="when">{fmtTime(e.at)}</span>
-          <span><span className="txt">{e.text}</span> <span className="who">· {e.actor}{audit ? ` · via ${e.route} · ${e.kind}` : ''}</span></span>
+          <span><span className="txt">{e.text}</span> <span className="who">· {e.actor} · via {e.route} · {e.kind}</span></span>
         </li>)}
-      </ul>
+      </ul> : <TimelineTrack inc={inc} />}
     </Section>
   )
 }
