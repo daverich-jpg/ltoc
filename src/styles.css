@@ -468,3 +468,7 @@ select::-ms-expand { display: none; }
 .ai-loading { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
 .ai-loading .small { display: inline-flex; align-items: center; gap: 6px; color: var(--indigo); }
 .seg button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* A select still showing its prompt reads like a placeholder, not a chosen value; the prompt is hidden from the option list. */
+select.is-placeholder { color: var(--text-4); }
+select option { color: var(--text); }

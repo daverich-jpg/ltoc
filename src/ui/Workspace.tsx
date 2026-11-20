@@ -238,8 +238,8 @@ function VerifySection({ inc, lead }: { inc: Incident; lead: boolean }) {
             <Cmd inc={inc} prefix="Dismiss" kind="danger" disabled={!reason.trim()} onClick={() => E.dismissIncident(inc.id, reason.trim())}>Dismiss</Cmd>
           </div>
           <div className="inline-form">
-            <select id="merge-target" value={mergeTo} onChange={e => setMergeTo(e.target.value)}>
-              <option value="">{candidates.length ? 'Duplicate of…' : 'No nearby open incident'}</option>
+            <select id="merge-target" className={mergeTo ? '' : 'is-placeholder'} value={mergeTo} onChange={e => setMergeTo(e.target.value)}>
+              <option value="" disabled hidden={candidates.length > 0}>{candidates.length ? 'Duplicate of…' : 'No nearby open incident'}</option>
               {candidates.map(c => <option key={c.o.id} value={c.o.id}>{c.o.id} · {c.o.title}</option>)}
             </select>
             <Cmd inc={inc} prefix="Merge" disabled={!mergeTo} onClick={() => E.mergeIncident(inc.id, mergeTo)}>Merge</Cmd>
@@ -482,7 +482,7 @@ function CloseSection({ inc, lead }: { inc: Incident; lead: boolean }) {
         : inc.state !== 'Road clear' ? <p className="small muted">Available once the scene confirms all lanes open.</p>
         : <>
           <div className="inline-form" style={{ marginTop: 0 }}>
-            <select value={disp} onChange={e => setDisp(e.target.value)} disabled={S.role === 'liaison'}><option value="">Where did the vehicle go?</option>{E.DISPOSITIONS.map(d => <option key={d}>{d}</option>)}</select>
+            <select className={disp ? '' : 'is-placeholder'} value={disp} onChange={e => setDisp(e.target.value)} disabled={S.role === 'liaison'}><option value="" disabled hidden>Where did the vehicle go?</option>{E.DISPOSITIONS.map(d => <option key={d}>{d}</option>)}</select>
             <input type="text" value={detail} onChange={e => setDetail(e.target.value)} placeholder="Detail (optional)" disabled={S.role === 'liaison'} />
           </div>
           {warn.length > 0 && <p className="small" style={{ marginTop: 6, color: 'var(--act-ink)' }}>Still open: {warn.join(', ')}.</p>}
