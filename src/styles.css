@@ -29,6 +29,8 @@
   --glass: rgba(255, 255, 255, 0.94);
   --field-line: #dddddd;
   --scrim: rgba(15, 15, 15, 0.3);
+  --note-bg: #fbf3db;          /* Notion's yellow block background */
+  --note-ink: #402c1b;
 
   /* status signals (from the sticker palette; ink variants darkened for text contrast) */
   --act: #dd5b00;             /* orange: glyphs, bars */
@@ -110,6 +112,8 @@ p { margin: 0; }
   --glass: rgba(32, 32, 32, 0.94);
   --field-line: #3a3a3a;
   --scrim: rgba(0, 0, 0, 0.55);
+  --note-bg: #3b3523;
+  --note-ink: #f1e6c4;
 
   --act: #ff7a2e;
   --act-ink: #ff9a5c;
@@ -472,3 +476,33 @@ select::-ms-expand { display: none; }
 /* A select still showing its prompt reads like a placeholder, not a chosen value; the prompt is hidden from the option list. */
 select.is-placeholder { color: var(--text-4); }
 select option { color: var(--text); }
+
+/* ---------- notes: pill → card ---------- */
+.ws { overflow: hidden; }
+.notes-dock { position: absolute; right: 18px; bottom: 18px; z-index: 12; display: flex; justify-content: flex-end; pointer-events: none; }
+.notes-dock > * { pointer-events: auto; }
+.note-pill { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; height: 36px; padding: 0 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-pop); cursor: pointer; font-size: 13.5px; font-weight: 600; }
+.note-pill-in { display: inline-flex; align-items: center; gap: 7px; }
+.note-pill:active { transform: scale(0.96); }
+.note-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.note-card { width: 360px; max-width: calc(100vw - 48px); background: var(--surface); box-shadow: var(--shadow-pop); overflow: hidden; }
+.note-inner { display: flex; flex-direction: column; max-height: min(460px, 60vh); }
+.note-head { display: flex; align-items: center; gap: 8px; padding: 12px 10px 8px 16px; }
+.note-head b { font-size: 14px; }
+.btn.icon { width: 28px; padding: 0; }
+.note-list { flex: 1; overflow-y: auto; padding: 2px 12px 8px; display: flex; flex-direction: column; gap: 6px; }
+.note-empty { padding: 4px 4px 8px; }
+.sticky { padding: 9px 11px 10px; border-radius: 10px; background: var(--note-bg); color: var(--note-ink); }
+.sticky p { margin: 3px 0 0; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; }
+.sticky-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; opacity: 0.9; }
+.sticky-meta .muted { font-weight: 400; margin-left: auto; color: inherit; opacity: 0.7; }
+.sticky.sending { opacity: 0.6; }
+.sticky .stale { margin-left: auto; font-weight: 500; }
+.avatar.sm { width: 18px; height: 18px; font-size: 9px; background: var(--note-ink); color: var(--note-bg); }
+.link { all: unset; text-decoration: underline; cursor: pointer; font-weight: 600; }
+.note-compose { padding: 8px 12px 12px; border-top: 1px solid var(--line-soft); }
+.note-compose textarea { min-height: 52px; max-height: 140px; resize: none; border-radius: var(--r-md); }
+.note-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.tl li.k-note { background: var(--note-bg); border-radius: var(--r-sm); border-top-color: transparent; padding-left: 6px; padding-right: 6px; }
+.tl li.k-note .txt { color: var(--note-ink); font-style: normal; }
+.tl li.k-note .when, .tl li.k-note .who { color: var(--note-ink); opacity: 0.75; }

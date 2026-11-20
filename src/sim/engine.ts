@@ -422,6 +422,7 @@ function background() {
   a.assignments = [as1, as2]
   setState(a, 'Responding', 'First dispatch sent (LT-P40).'); S.now += 20000; setState(a, 'On scene', 'First confirmed arrival: LT-P40 (radio).')
   S.units['LT-P40'] = { ...S.units['LT-P40'], state: 'On scene', stateAt: S.now, posNode: 'lekki1', posAt: S.now, incidentId: a.id }
+  log(a, 'note', 'LT-TOW9 is our only tow on Lekki until 09:00. Keep it here until Ajah traffic eases.', 'Supervisor (Shift B)', 'console')
   S.units['LT-TOW9'] = { ...S.units['LT-TOW9'], state: 'En route', stateAt: S.now + 25000, stateChannel: 'terminal', posNode: 'lekki1', posAt: S.now + 25000, incidentId: a.id }
   // B: congestion event at Oshodi
   S.now = t0 - 22 * 60000

@@ -128,6 +128,7 @@ export function Workspace() {
       if (e.key === 'v') go('#confirm-basis')
       if (e.key === 'd') go('#dismiss-reason', true)
       if (e.key === 'm') go('#merge-target', true)
+      if (e.key === 'n') { e.preventDefault(); window.dispatchEvent(new Event('ltoc-note')) }
     }
     window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
   }, [inc?.id])
@@ -177,6 +178,7 @@ export function Workspace() {
         <CloseSection inc={inc} lead={lead === 'close'} />
         <TimelineSection inc={inc} lead={lead === 'timeline'} />
       </div>
+      <NotesDock inc={inc} />
     </motion.div>
   )
 }
@@ -496,24 +498,18 @@ function CloseSection({ inc, lead }: { inc: Incident; lead: boolean }) {
 // ---------------- Timeline ----------------
 function TimelineSection({ inc, lead }: { inc: Incident; lead: boolean }) {
   const S = useSim()
-  const [note, setNote] = useState('')
   const [audit, setAudit] = useState(false)
   const evs = [...inc.timeline].reverse()
   const shown = audit ? evs : evs.filter(e => e.kind !== 'notify' || /acknowledged/.test(e.text) === false)
   return (
     <Section id="timeline" inc={inc} title="Timeline" summary={`${inc.timeline.length} events · last ${fmtAge(S.now - (inc.timeline.at(-1)?.at ?? S.now))} ago`} lead={lead}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-        <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note for all seats" onKeyDown={e => { if (e.key === 'Enter') { E.addNote(inc.id, note); setNote('') } }} />
-        <button className="btn" onClick={() => { E.addNote(inc.id, note); setNote('') }} disabled={!note.trim()}>Add</button>
-        {S.role === 'supervisor' && <button className="btn ghost" aria-pressed={audit} onClick={() => setAudit(!audit)}>{audit ? 'Hide audit detail' : 'Audit view'}</button>}
-      </div>
+      {S.role === 'supervisor' && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><button className="btn ghost sm" aria-pressed={audit} onClick={() => setAudit(!audit)}>{audit ? 'Hide audit detail' : 'Audit view'}</button></div>}
       <ul className="tl">
         {shown.map(e => <li key={e.id} className={`k-${e.kind}`}>
           <span className="when">{fmtTime(e.at)}</span>
           <span><span className="txt">{e.text}</span> <span className="who">· {e.actor}{audit ? ` · via ${e.route} · ${e.kind}` : ''}</span></span>
         </li>)}
       </ul>
-      <Pendings inc={inc} prefixes={['Add note']} />
     </Section>
   )
 }
@@ -621,5 +617,84 @@ function AIRead({ inc, canApply }: { inc: Incident; canApply: boolean }) {
         : <p className="small muted" style={{ marginTop: 6 }}>Nothing specific enough to suggest yet.</p>}
       {seg && r.segId !== inc.segId && <p className="small" style={{ marginTop: 6, color: 'var(--watch)' }}>Reports point to {seg.name}; the incident is placed on {segById[inc.segId].name}.</p>}
     </motion.div>
+  )
+}
+
+// ---------------- Notes ----------------
+const NoteIcon = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 2.5h10v7L9.5 13H3z" /><path d="M9.5 13V9.5H13" /></svg>
+const initials = (who: string) => who.replace(/\(.*\)/, '').split(/[\s·]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
+
+/** Notes between seats. A pill in the corner morphs into a small card; the composer is there only when you want it.
+ *  Notes are not world state, so they appear instantly ("Sending…") and settle when the server confirms. */
+function NotesDock({ inc }: { inc: Incident }) {
+  const S = useSim()
+  const U = useUI()
+  const reduce = useReducedMotion()
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState<{ id: string; text: string; at: number }[]>([])
+  const listRef = useRef<HTMLDivElement>(null)
+  const notes = inc.timeline.filter(e => e.kind === 'note')
+  const closed = isTerminal(inc)
+  const failed = S.pending.find(p => p.incidentId === inc.id && p.label === 'Add note' && p.status === 'failed')
+
+  useEffect(() => { setOpen(false); setText(''); setSending([]) }, [inc.id])
+  useEffect(() => { setSending(s => s.filter(p => !notes.some(n => n.text === p.text && n.at >= p.at))) }, [notes.length])
+  useEffect(() => { const h = () => { if (!closed) setOpen(true) }; window.addEventListener('ltoc-note', h); return () => window.removeEventListener('ltoc-note', h) }, [closed])
+  useEffect(() => { if (open) listRef.current?.scrollTo({ top: 1e6 }) }, [open, notes.length, sending.length])
+  if (closed && !notes.length) return null
+
+  const post = () => {
+    const t = text.trim(); if (!t) return
+    setSending(s => [...s, { id: `${Date.now()}`, text: t, at: S.now }])
+    E.addNote(inc.id, t); setText('')
+  }
+  const instant = reduce || U.lastInput === 'keyboard'
+  const morph = instant ? { duration: 0 } : { type: 'spring' as const, damping: 25, stiffness: 300 }
+  const enter = instant ? false : { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }
+
+  return (
+    <div className="notes-dock">
+      <AnimatePresence initial={false} mode="popLayout">
+        {open ? (
+          <motion.div key="card" layoutId={`notes-${inc.id}`} className="note-card" style={{ borderRadius: 16 }} transition={morph} role="dialog" aria-label={`Notes on ${inc.id}`}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } }}>
+            <motion.div className="note-inner" initial={instant ? false : { opacity: 0 }} animate={{ opacity: 1, transition: { delay: instant ? 0 : 0.08, duration: 0.15 } }} exit={{ opacity: 0, transition: { duration: 0.08 } }}>
+              <div className="note-head">
+                <b>Notes</b><span className="muted small">Everyone on {inc.id} sees these</span>
+                <span className="spacer" style={{ flex: 1 }} />
+                <button className="btn ghost sm icon" onClick={() => setOpen(false)} aria-label="Close notes"><Icon.x /></button>
+              </div>
+              <div className="note-list" ref={listRef}>
+                {notes.length === 0 && sending.length === 0 && <p className="small muted note-empty">No notes yet.</p>}
+                {notes.map(n => <motion.div key={n.id} className="sticky" initial={enter} animate={{ opacity: 1, transform: 'translateY(0px)', filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
+                  <div className="sticky-meta"><span className="avatar sm" aria-hidden>{initials(n.actor)}</span>{n.actor}<span className="muted num">{fmtTime(n.at, false)}</span></div>
+                  <p>{n.text}</p>
+                </motion.div>)}
+                {sending.map(p => <motion.div key={p.id} className="sticky sending" initial={enter} animate={{ opacity: 1, transform: 'translateY(0px)', filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
+                  <div className="sticky-meta"><span className="avatar sm" aria-hidden>{initials(S.seat)}</span>You
+                    {failed ? <span className="stale">Not sent · <button className="link" onClick={() => E.retry(failed.id)}>Retry</button></span> : <span className="muted">Sending…</span>}</div>
+                  <p>{p.text}</p>
+                </motion.div>)}
+              </div>
+              {!closed && <div className="note-compose">
+                <textarea autoFocus rows={2} value={text} onChange={e => setText(e.target.value)} placeholder="Write a note…" aria-label="New note"
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post() } }} />
+                <div className="note-foot">
+                  <span className="small muted">Enter to post · Shift+Enter for a new line</span>
+                  <button className="btn primary sm" disabled={!text.trim()} onClick={post}>Post</button>
+                </div>
+              </div>}
+            </motion.div>
+          </motion.div>
+        ) : (
+          <motion.button key="pill" layoutId={`notes-${inc.id}`} className="note-pill" style={{ borderRadius: 9999 }} transition={morph} onClick={() => setOpen(true)} aria-label={closed ? `Read ${notes.length} notes` : 'Add a note (N)'} title={closed ? undefined : 'Add a note (N)'}>
+            <motion.span className="note-pill-in" initial={instant ? false : { opacity: 0 }} animate={{ opacity: 1, transition: { delay: instant ? 0 : 0.06, duration: 0.12 } }}>
+              <NoteIcon />{notes.length ? <>{notes.length}<span className="sr-only"> {notes.length === 1 ? "note" : "notes"}</span></> : 'Note'}
+            </motion.span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
