@@ -6,6 +6,7 @@ import { AGENCIES } from '../sim/seed'
 import type { AgencyId, Incident, Tier } from '../sim/types'
 import { Age, Assumed, Icon, Sim, StateChip, TierGlyph, fmtAge, fmtDur, fmtTime } from './bits'
 import { COND_LEGEND, MapCanvas } from './MapCanvas'
+import { Car, VideoCamera } from './icons'
 import { go, openIncident, setUI, useSim, useUI } from './store'
 
 const COND_RANK: Record<Cond, number> = { Free: 0, Slow: 1, Heavy: 2, Standstill: 3 }
@@ -113,10 +114,11 @@ export function LiveMapModule({ focusId, wsOpen }: { focusId?: string; wsOpen?: 
             {(Object.keys(U.layers) as (keyof typeof U.layers)[]).map(k => <label key={k}><input type="checkbox" checked={U.layers[k]} onChange={e => setUI(u => ({ layers: { ...u.layers, [k]: e.target.checked } }))} />{k[0].toUpperCase() + k.slice(1)}</label>)}
             <div className="legend">
               {(Object.keys(COND_LEGEND) as Cond[]).map(c => <Fragment key={c}><svg width="26" height="8"><line x1="2" y1="4" x2="24" y2="4" stroke={COND_LEGEND[c].c} strokeWidth={COND_LEGEND[c].w} strokeDasharray={COND_LEGEND[c].dash} strokeLinecap="round" /></svg><span>{c}</span></Fragment>)}
-              <svg width="26" height="12"><path d="M13 1 22 11H4Z" fill="var(--act)" /></svg><span>Act now</span>
-              <svg width="26" height="12"><path d="M13 1 18 6 13 11 8 6Z" fill="var(--watch-fill)" stroke="var(--watch)" strokeWidth="1.6" /></svg><span>Watch</span>
-              <svg width="26" height="12"><path d="M13 1 18 6 13 11 8 6Z" fill="none" stroke="var(--watch)" strokeWidth="2" strokeDasharray="3 2" /></svg><span>Unverified</span>
-              <svg width="26" height="14"><circle cx="13" cy="7" r="5.5" fill="none" stroke="var(--text)" strokeWidth="1.3" /></svg><span>Unit</span>
+              <span className="legend-glyph"><TierGlyph tier="act" size={13} /></span><span>Act now</span>
+              <span className="legend-glyph"><TierGlyph tier="watch" size={13} /></span><span>Watch</span>
+              <span className="legend-glyph"><span className="legend-ring"><TierGlyph tier="watch" size={11} /></span></span><span>Dashed ring: unverified</span>
+              <span className="legend-glyph"><span className="legend-unit"><Car size={10} /></span></span><span>Unit, by type</span>
+              <span className="legend-glyph"><span className="legend-unit"><VideoCamera size={10} /></span></span><span>Camera</span>
               <svg width="26" height="8"><line x1="2" y1="4" x2="24" y2="4" stroke="var(--diversion)" strokeWidth="2" strokeDasharray="5 4" /></svg><span>Diversion proposed</span>
             </div>
           </>}

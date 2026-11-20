@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MAP_H, MAP_W, NODES, SEGMENTS, WATER, nodeXY, segById, segPoint, upstreamOf } from '../sim/geo'
 import { isOpen, readingFor, segmentStatus, tierOf, lastConf, type Cond } from '../sim/derive'
 import { getUI, openIncident, setUI, useSim, useUI } from './store'
+import { Ambulance, Car, Circle, Diamond, FireTruck, Lifebuoy, Siren, Triangle, Truck, VideoCamera, VideoCameraSlash } from './icons'
+import type { UnitType } from '../sim/types'
+
+const UNIT_ICON: Record<UnitType, typeof Car> = { patrol: Car, rescue: Lifebuoy, ambulance: Ambulance, fire: FireTruck, police: Siren, recovery: Truck }
 import type { Incident } from '../sim/types'
 
 const COND_STYLE: Record<Cond, { c: string; w: number; dash?: string }> = {
@@ -11,7 +15,6 @@ const COND_STYLE: Record<Cond, { c: string; w: number; dash?: string }> = {
   Standstill: { c: 'var(--t-stand)', w: 5.5, dash: '7 3' },
 }
 export const COND_LEGEND = COND_STYLE
-const AGENCY_LETTER: Record<string, string> = { LASTMA: 'T', LASEMA: 'E', LASAMBUS: 'A', FIRE: 'F', POLICE: 'P', FRSC: 'R', PRIVATE: 'W' }
 
 function easeOut(t: number) { return 1 - Math.pow(1 - t, 3) }
 
@@ -206,9 +209,8 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
           const [x, y] = segPoint(c.segId, c.t); const k = v.w / 1000
           const rel = !related || focus?.cameraId === c.id
           return <g key={c.id} transform={`translate(${x + 8 * k} ${y + 6 * k}) scale(${k})`} opacity={rel ? 0.9 : 0.25}>
-            <rect x={-5} y={-3.5} width={8} height={7} rx={1.5} fill="var(--surface)" stroke={c.status === 'ok' ? 'var(--text-2)' : 'var(--text-3)'} strokeWidth={1.2} />
-            <path d="M3 -1.5 6 -3 6 3 3 1.5" fill="none" stroke={c.status === 'ok' ? 'var(--text-2)' : 'var(--text-3)'} strokeWidth={1.2} />
-            {c.status === 'offline' && <line x1={-6} y1={4} x2={6} y2={-4} stroke="var(--act)" strokeWidth={1.4} />}
+            <circle r={6} fill="var(--surface)" stroke="var(--line)" strokeWidth={0.8} />
+            {c.status === 'ok' ? <VideoCamera x={-4} y={-4} size={8} style={{ color: 'var(--text-2)' }} /> : <VideoCameraSlash x={-4} y={-4} size={8} style={{ color: 'var(--act)' }} />}
             <title>{`${c.id} · ${c.name} · ${c.status} · location assumed`}</title>
           </g>
         })}
@@ -228,8 +230,8 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
           const busy = u.state !== 'Available'
           const age = S.now - u.posAt
           return <g key={u.id} transform={`translate(${p[0]} ${p[1]}) scale(${k})`} opacity={rel ? 1 : 0.22}>
-            <circle r={6.5} fill="var(--surface)" stroke={busy ? 'var(--text)' : 'var(--text-3)'} strokeWidth={1.3} strokeDasharray={age > 300000 ? '2 2' : undefined} />
-            <text y={3} textAnchor="middle" fontSize={7.5} fontWeight={600} fill={busy ? 'var(--text)' : 'var(--text-3)'} fontFamily="var(--mono)">{AGENCY_LETTER[u.agency]}</text>
+            <circle r={7} fill="var(--surface)" stroke={busy ? 'var(--text)' : 'var(--text-3)'} strokeWidth={1.2} strokeDasharray={age > 300000 ? '2 2' : undefined} />
+            {(() => { const UI = UNIT_ICON[u.type]; return <UI x={-4.5} y={-4.5} size={9} style={{ color: busy ? 'var(--text)' : 'var(--text-3)' }} /> })()}
             {(zoomedIn && (rel && related)) && <text x={9} y={3} fontSize={8.5} className="map-label" style={{ strokeWidth: 2.5 }}>{u.callsign} · {u.state.toLowerCase()}</text>}
             <title>{`${u.callsign} (${u.agency}) · ${u.state} · position confirmed ${Math.round(age / 1000)} s ago`}</title>
           </g>
@@ -252,9 +254,11 @@ function IncidentMarker({ inc, k, focused, dim, onClick }: { inc: Incident; k: n
     <g transform={`translate(${x} ${y}) scale(${s})`} opacity={dim ? 0.3 : 1} style={{ cursor: 'pointer' }} onClick={onClick}>
       {focused && <circle r={16} fill="none" stroke="var(--accent)" strokeWidth={1.2} strokeDasharray="3 3" />}
       <circle r={13} fill="transparent" />
-      {tier === 'act' && <path d="M0 -9 9 7H-9Z" fill="var(--act)" stroke="var(--surface)" strokeWidth={1.5} strokeDasharray={unverified ? '3 2' : undefined} />}
-      {tier === 'watch' && <path d="M0 -8 8 0 0 8 -8 0Z" fill="var(--watch-fill)" stroke="var(--watch)" strokeWidth={2.2} strokeDasharray={unverified ? '3 2' : undefined} />}
-      {tier === 'ambient' && <circle r={6} fill="var(--surface)" stroke="var(--ambient)" strokeWidth={1.8} />}
+      {/* Phosphor tier glyph on a surface disc; a dashed ring marks "not yet verified" */}
+      <circle r={10.5} fill="var(--surface)" stroke={unverified ? (tier === 'act' ? 'var(--act)' : 'var(--watch)') : 'var(--line)'} strokeWidth={unverified ? 1.4 : 0.8} strokeDasharray={unverified ? '3 2' : undefined} />
+      {tier === 'act' && <Triangle x={-7.5} y={-8.5} size={15} weight="fill" style={{ color: 'var(--act)' }} />}
+      {tier === 'watch' && <Diamond x={-8} y={-8} size={16} weight="duotone" style={{ color: 'var(--watch)' }} />}
+      {tier === 'ambient' && <Circle x={-6} y={-6} size={12} style={{ color: 'var(--ambient)' }} />}
       {(focused || tier === 'act') && <text x={12} y={4} className="map-label inc" style={{ strokeWidth: 3, fontSize: focused ? 8.5 : 11 }}>{inc.id}{unverified ? ' · unverified' : ''}</text>}
       <title>{`${inc.id} · ${inc.title} · ${inc.state}`}</title>
     </g>

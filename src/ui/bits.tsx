@@ -1,5 +1,6 @@
+import type React from 'react'
 import type { ReactNode } from 'react'
-import { ArrowCounterClockwise, Buildings, CaretRight, Car, ChartBar, ChartLine, Check, FlowArrow, Link, MagnifyingGlass, MapTrifold, Pause, Phone, Play, SquaresFour, User, UsersThree, VideoCamera, Warning, WarningCircle, WifiHigh, X } from './icons'
+import { Circle, CircleNotch, Diamond, Triangle, ArrowCounterClockwise, Buildings, CaretRight, Car, ChartBar, ChartLine, Check, FlowArrow, Link, MagnifyingGlass, MapTrifold, Pause, Phone, Play, SquaresFour, User, UsersThree, VideoCamera, Warning, WarningCircle, WifiHigh, X } from './icons'
 import type { IncidentState, SourceType, Tier, Channel } from '../sim/types'
 
 export const WAT = 3600000
@@ -15,12 +16,14 @@ export const fmtDur = (sec?: number) => sec == null ? '—' : sec < 60 ? `${Math
 
 /** Tier is carried by shape + text + position, not colour alone (PRD principle 6). */
 export function TierGlyph({ tier, size = 12 }: { tier: Tier; size?: number }) {
-  const s = size
-  if (tier === 'act') return <svg className="glyph" width={s} height={s} viewBox="0 0 12 12" aria-hidden><path d="M6 1 11.2 10.5H.8Z" fill="var(--act)" /></svg>
-  if (tier === 'watch') return <svg className="glyph" width={s} height={s} viewBox="0 0 12 12" aria-hidden><path d="M6 1.2 10.8 6 6 10.8 1.2 6Z" fill="var(--watch-fill)" stroke="var(--watch)" strokeWidth="1.6" /></svg>
-  if (tier === 'ambient') return <svg className="glyph" width={s} height={s} viewBox="0 0 12 12" aria-hidden><circle cx="6" cy="6" r="4" fill="none" stroke="var(--ambient)" strokeWidth="1.5" /></svg>
-  return <svg className="glyph" width={s} height={s} viewBox="0 0 12 12" aria-hidden><path d="M2.5 6.2 5 8.6 9.6 3.6" fill="none" stroke="var(--text-3)" strokeWidth="1.6" /></svg>
+  if (tier === 'act') return <Triangle className="glyph" size={size} weight="fill" style={{ color: 'var(--act)' }} />
+  if (tier === 'watch') return <Diamond className="glyph" size={size} weight="duotone" style={{ color: 'var(--watch)' }} />
+  if (tier === 'ambient') return <Circle className="glyph" size={size} style={{ color: 'var(--ambient)' }} />
+  return <Check className="glyph" size={size} style={{ color: 'var(--text-3)' }} />
 }
+
+/** Loading indicator: Phosphor's circle-notch, spun by CSS. */
+export const Spinner = ({ size = 13, style }: { size?: number; style?: React.CSSProperties }) => <CircleNotch className="spinner" size={size} style={style} />
 
 const STATE_CLASS: Partial<Record<IncidentState, string>> = { Reported: 'act', Verifying: 'watch', 'Road clear': 'ok', Closed: '', Dismissed: '', Merged: '' }
 export function StateChip({ state }: { state: IncidentState }) {

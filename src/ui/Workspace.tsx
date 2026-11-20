@@ -5,7 +5,7 @@ import { assignmentOverdue, impactOf, isTerminal, lastConf, metricsOf, nextActio
 import { GEO_AS_OF, haversine, nodeById, segById, route } from '../sim/geo'
 import { AGENCIES } from '../sim/seed'
 import { LIFECYCLE, UNIT_FLOW, type AgencyId, type Incident, type Severity, type Unit, type UnitType } from '../sim/types'
-import { Age, Assumed, Icon, Kbd, Sim, SourceIcon, StateChip, TierGlyph, fmtAge, fmtDur, fmtTime } from './bits'
+import { Age, Assumed, Icon, Kbd, Sim, SourceIcon, StateChip, TierGlyph, fmtAge, fmtDur, fmtTime , Spinner } from './bits'
 import { closeIncident, getUI, openIncident, setUI, useSim, useUI } from './store'
 import type { State } from '../sim/engine'
 import { draftMessage, readReports } from '../ai/client'
@@ -52,7 +52,7 @@ function Cmd({ inc, prefix, onClick, children, kind = '', disabled, title, k, id
   const busy = p?.status === 'pending'
   return (
     <button id={id} className={`btn ${kind} ${busy ? 'pending' : ''}`} disabled={disabled || busy} onClick={onClick} title={title} aria-busy={busy}>
-      {busy && <span className="spinner" />}{children}{k && !busy && <Kbd>{k}</Kbd>}
+      {busy && <Spinner />}{children}{k && !busy && <Kbd>{k}</Kbd>}
     </button>
   )
 }
@@ -61,7 +61,7 @@ function Pendings({ inc, prefixes }: { inc: Incident; prefixes: string[] }) {
   const ps = S.pending.filter(p => p.incidentId === inc.id && prefixes.some(x => p.label.startsWith(x)))
   return <>{ps.map(p => p.status === 'failed'
     ? <div key={p.id} className="inline-err" role="alert"><Icon.alert /><span className="grow"><b>{p.label}</b> did not apply. {p.error}</span><button className="btn sm" onClick={() => E.retry(p.id)}>Retry</button><button className="btn sm ghost" onClick={() => E.discardFailed(p.id)}>Dismiss</button></div>
-    : <div key={p.id} className="pending-line"><span className="spinner" />{p.label}: sent, waiting for confirmation <span className="num muted">{fmtAge(S.now - p.issuedAt)}</span></div>)}</>
+    : <div key={p.id} className="pending-line"><Spinner />{p.label}: sent, waiting for confirmation <span className="num muted">{fmtAge(S.now - p.issuedAt)}</span></div>)}</>
 }
 
 function Section({ id, inc, title, summary, lead, children }: { id: Sec; inc: Incident; title: string; summary: ReactNode; lead: boolean; children: ReactNode }) {
@@ -420,7 +420,7 @@ function ClearSection({ inc, lead }: { inc: Incident; lead: boolean }) {
     <Section id="clear" inc={inc} title="Clear" summary={summary} lead={lead}>
       {!done && <div className="clear-row">
         <div><div className="label">Scene</div><div className="small muted">{inc.state === 'Road clear' ? 'All lanes open, confirmed' : inc.state === 'Clearing' ? 'Recovery under way' : onScene ? 'Units on scene' : 'Waiting for units on scene'}</div></div>
-        {inc.pendingField ? <div className="pending-line" style={{ marginTop: 0 }}><span className="spinner" />Waiting for {inc.pendingField.unitId} · {fmtAge(S.now - inc.pendingField.at)}</div>
+        {inc.pendingField ? <div className="pending-line" style={{ marginTop: 0 }}><Spinner />Waiting for {inc.pendingField.unitId} · {fmtAge(S.now - inc.pendingField.at)}</div>
           : inc.state === 'On scene' ? <Cmd inc={inc} prefix="Request clearing" kind="primary" onClick={() => E.requestFieldStatus(inc.id, 'Clearing')} disabled={!onScene || lia}>Ask: recovery started?</Cmd>
           : inc.state === 'Clearing' ? <Cmd inc={inc} prefix="Request road clear" kind="primary" onClick={() => E.requestFieldStatus(inc.id, 'Road clear')} disabled={lia}>Ask: all lanes open?</Cmd>
           : null}
@@ -552,7 +552,7 @@ function RecommendedTeam({ inc, want, suggested, canDispatch, playbook }: { inc:
         </label></li>}
       </ul>
       <div className="actions" style={{ marginTop: 8 }}>
-        <button className={`btn primary ${busy ? 'pending' : ''}`} disabled={(!chosen.length && !usePb) || busy} onClick={go}>{busy && <span className="spinner" />}Dispatch {chosen.length} unit{chosen.length === 1 ? '' : 's'}</button>
+        <button className={`btn primary ${busy ? 'pending' : ''}`} disabled={(!chosen.length && !usePb) || busy} onClick={go}>{busy && <Spinner />}Dispatch {chosen.length} unit{chosen.length === 1 ? '' : 's'}</button>
       </div>
     </div>
   )

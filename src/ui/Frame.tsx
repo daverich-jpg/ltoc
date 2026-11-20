@@ -5,7 +5,7 @@ import { isTerminal, tierOf, TIER_LABEL, nextAction } from '../sim/derive'
 import { SEGMENTS, segById } from '../sim/geo'
 import { AGENCIES } from '../sim/seed'
 import type { AgencyId, Incident, Role, Tier } from '../sim/types'
-import { Age, Icon, Kbd, StateChip, TierGlyph, fmtAge, fmtTime } from './bits'
+import { Age, Icon, Kbd, StateChip, TierGlyph, fmtAge, fmtTime , Spinner } from './bits'
 import { getUI, go, openIncident, setUI, useSim, useUI, type Module } from './store'
 import { toggleTheme, useTheme, currentTheme } from './theme'
 import { Sun as PhSun, Moon as PhMoon } from './icons'
@@ -246,7 +246,7 @@ function RailCard({ inc, tier, reasons, active, pulse }: { inc: Incident; tier: 
       </div>
       <motion.div layoutId={`title-${inc.id}`} className="title" transition={{ type: 'spring', damping: 25, stiffness: 300 }}>{inc.title}</motion.div>
       <div className="why">
-        {pend ? (pend.status === 'failed' ? <><Icon.alert /> <span className="stale">{pend.label} failed</span></> : <><span className="spinner" style={{ color: 'var(--accent)', width: 10, height: 10, marginTop: 3 }} /> {pend.label}…</>)
+        {pend ? (pend.status === 'failed' ? <><Icon.alert /> <span className="stale">{pend.label} failed</span></> : <><Spinner style={{ color: 'var(--accent)', marginTop: 3 }} /> {pend.label}…</>)
           : <span>{tier === 'act' || reasons[0]?.includes('Act now in') ? reasons[0] : !isTerminal(inc) ? nextAction(inc, S) : reasons[0]}</span>}
       </div>
     </button>
