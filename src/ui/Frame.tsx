@@ -8,6 +8,7 @@ import type { AgencyId, Incident, Role, Tier } from '../sim/types'
 import { Age, Icon, Kbd, StateChip, TierGlyph, fmtAge, fmtTime } from './bits'
 import { getUI, go, openIncident, setUI, useSim, useUI, type Module } from './store'
 import { toggleTheme, useTheme, currentTheme } from './theme'
+import { Sun as PhSun, Moon as PhMoon } from '@phosphor-icons/react'
 
 export function TopBar() {
   const S = useSim()
@@ -77,8 +78,8 @@ function SearchField() {
   )
 }
 
-const Sun = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden><circle cx="8" cy="8" r="3" /><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" /></svg>
-const Moon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden><path d="M13.5 9.6A5.5 5.5 0 0 1 6.4 2.5a5.5 5.5 0 1 0 7.1 7.1Z" /></svg>
+const Sun = () => <PhSun size={16} weight="bold" aria-hidden />
+const Moon = () => <PhMoon size={16} weight="bold" aria-hidden />
 /** Shows the theme you'd switch TO. Icons cross-fade with scale and blur rather than swapping. */
 function ThemeToggle() {
   const theme = useTheme()

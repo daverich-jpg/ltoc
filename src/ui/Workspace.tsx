@@ -10,6 +10,7 @@ import { closeIncident, getUI, openIncident, setUI, useSim, useUI } from './stor
 import type { State } from '../sim/engine'
 import { draftMessage, readReports } from '../ai/client'
 import { TimelineTrack } from './Timeline'
+import { NotePencil, Sparkle } from '@phosphor-icons/react'
 import type { AIResult, MessageDraft, MessageFacts, ReportRead } from '../ai/types'
 
 type Sec = 'verify' | 'assess' | 'response' | 'clear' | 'close' | 'timeline'
@@ -563,7 +564,7 @@ function SwitchToSupervisor() {
 }
 
 // ---------------- AI assists ----------------
-export const Spark = () => <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><path d="M6 .8c.3 2.6 1.6 3.9 4.2 4.2v.1C7.6 5.4 6.3 6.7 6 9.3h-.1C5.6 6.7 4.3 5.4 1.7 5.1V5C4.3 4.7 5.6 3.4 5.9.8Z" fill="currentColor" /><circle cx="10" cy="10" r="1" fill="currentColor" /></svg>
+export const Spark = () => <Sparkle size={13} weight="fill" aria-hidden />
 function AIBadge({ mode, edited, kind = 'draft' }: { mode: 'live' | 'demo'; edited?: boolean; kind?: 'draft' | 'read' }) {
   return <span className="ai-badge" title={mode === 'demo' ? 'Demo mode: no API key is set, so this is a rule-based stand-in for the model' : 'From Claude. A person checks it before anything changes.'}><Spark /> AI {kind}{edited ? ' · edited' : ''}{mode === 'demo' ? ' · demo' : ''}</span>
 }
@@ -631,7 +632,7 @@ function AIRead({ inc, canApply }: { inc: Incident; canApply: boolean }) {
 }
 
 // ---------------- Notes ----------------
-const NoteIcon = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 2.5h10v7L9.5 13H3z" /><path d="M9.5 13V9.5H13" /></svg>
+const NoteIcon = () => <NotePencil size={15} weight="bold" aria-hidden />
 const initials = (who: string) => who.replace(/\(.*\)/, '').split(/[\s·]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 
 /** Notes between seats. A pill in the corner morphs into a small card; the composer is there only when you want it.

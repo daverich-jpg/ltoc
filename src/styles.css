@@ -141,8 +141,9 @@ p { margin: 0; }
   --t-stand: #ff8ccf;
   --diversion: #9aa6f0;
 
-  --shadow-1: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 18px rgba(0, 0, 0, 0.45), 0 16px 40px rgba(0, 0, 0, 0.4);
+  /* Layered drop shadows vanish on dark surfaces: one faint white ring does the work. Floating layers keep a single drop for lift. */
+  --shadow-1: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 :root[data-theme='dark'] select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23a3a3a3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E"); }
 :root[data-theme='dark'] .cam { outline-color: rgba(255, 255, 255, 0.1); }
@@ -186,9 +187,9 @@ kbd { font: 500 11px/1 var(--sans); font-variant-numeric: tabular-nums; min-widt
 .tier-head { display: flex; align-items: center; gap: 8px; padding: 12px 4px 6px; font-size: 13px; font-weight: 600; color: var(--text); }
 .tier-head .count { color: var(--text-3); font-weight: 500; font-variant-numeric: tabular-nums; }
 .rail-empty { margin: 0 0 6px; padding: 10px 12px; border-radius: var(--r-lg); border: 1px dashed var(--road-casing); color: var(--text-3); font-size: 13px; }
-.card { all: unset; box-sizing: border-box; display: block; width: 100%; margin-bottom: 6px; padding: 10px 12px 10px 14px; border-radius: var(--r-lg); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; position: relative; transition-property: box-shadow, transform; transition-duration: 160ms; transition-timing-function: var(--ease-ui); }
+.card { all: unset; box-sizing: border-box; display: block; width: 100%; margin-bottom: 6px; padding: 10px 12px 10px 14px; border-radius: var(--r-lg); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; position: relative; transition-property: box-shadow; transition-duration: 120ms; transition-timing-function: var(--ease-ui); }
 @media (hover: hover) and (pointer: fine) { .card:hover { box-shadow: inset 0 0 0 1px var(--road-casing), var(--shadow-1); } }
-.card:active { transform: scale(0.99); }
+/* Rail cards are opened dozens of times a shift: instant ring feedback, no press motion (static). */
 .card[aria-current='true'] { box-shadow: inset 0 0 0 1.5px var(--accent), var(--shadow-1); }
 .card.t-act::before, .card.t-watch::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; }
 .card.t-act::before { background: var(--act); }
@@ -410,7 +411,7 @@ select::-ms-expand { display: none; }
 .gal { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .gal button { all: unset; cursor: pointer; padding: 14px; border-radius: var(--r-lg); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); transition-property: box-shadow, transform; transition-duration: 160ms; transition-timing-function: var(--ease-ui); }
 @media (hover: hover) and (pointer: fine) { .gal button:hover { box-shadow: inset 0 0 0 1px var(--road-casing), var(--shadow-1); } }
-.gal button:active { transform: scale(0.98); }
+.gal button:active { transform: scale(0.96); }
 
 .bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
 .bar > i { display: block; height: 100%; background: var(--text-2); }
@@ -566,3 +567,10 @@ textarea.composer-input:focus { outline: none; }
 .mark .count { position: absolute; top: -5px; right: -7px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9999px; background: var(--pill-strong); color: var(--pill-strong-ink); font-size: 9.5px; font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
 .tip-list li { display: flex; gap: 6px; }
 .tip-list li span { flex: none; }
+
+/* Optical alignment: a leading icon makes even padding look lopsided, so the icon side gets 2px less. */
+.btn:has(> svg:first-child), .btn:has(> .spinner:first-child) { padding-left: 10px; }
+.btn.sm:has(> svg:first-child), .btn.sm:has(> .spinner:first-child) { padding-left: 7px; }
+.btn.primary:has(> svg:first-child), .btn.primary:has(> .spinner:first-child) { padding-left: 14px; }
+.btn.primary.sm:has(> svg:first-child), .btn.primary.sm:has(> .spinner:first-child) { padding-left: 10px; }
+.composer-bar .btn.primary:has(> .spinner:first-child) { padding-left: 10px; }

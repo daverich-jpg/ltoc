@@ -17,8 +17,9 @@ export function applyTheme(t: Theme) {
   off.textContent = '*,*::before,*::after{transition:none !important}'
   document.head.appendChild(off)
   document.documentElement.dataset.theme = t
-  void getComputedStyle(document.body).opacity // force a reflow with transitions off
-  requestAnimationFrame(() => off.remove())
+  void document.body.offsetHeight // force a synchronous style flush while transitions are off
+  // remove only after the new theme has painted, so nothing starts animating mid-switch
+  requestAnimationFrame(() => requestAnimationFrame(() => off.remove()))
   try { localStorage.setItem(KEY, t) } catch { /* ignore */ }
   listeners.forEach(l => l())
 }
