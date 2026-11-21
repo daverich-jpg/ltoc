@@ -33,7 +33,7 @@ export function FlowsModule() {
           <div className="gal">
             {E.STAGES.map((st, i) => <button key={st.id} onClick={() => run(st.id)}>
               <div className="num small muted">{String(i + 1).padStart(2, '0')} · {st.state}</div>
-              <div style={{ fontWeight: 600, margin: '4px 0 8px' }}>{st.label}</div>
+              <div style={{ fontWeight: 500, margin: '4px 0 8px' }}>{st.label}</div>
               <EmphasisThumb lead={i} />
               <div className="small" style={{ color: 'var(--accent)', marginTop: 8 }}>Open S1 at this stage →</div>
             </button>)}
