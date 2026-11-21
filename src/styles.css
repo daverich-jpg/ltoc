@@ -94,6 +94,7 @@ body { font: var(--type-body); background: var(--bg); color: var(--text); font-f
 button, input, select, textarea { font: inherit; color: inherit; }
 .mono, .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum', 'lnum'; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+b, strong { font-weight: 500; }
 h1, h2, h3, h4 { margin: 0; font-weight: 500; }
 p { margin: 0; }
 ::placeholder { color: var(--text-4); }
