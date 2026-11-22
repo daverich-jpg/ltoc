@@ -10,7 +10,7 @@ import { closeIncident, getUI, openIncident, setUI, useSim, useUI } from './stor
 import type { State } from '../sim/engine'
 import { draftMessage, readReports } from '../ai/client'
 import { TimelineTrack } from './Timeline'
-import { NotePencil, Sparkle } from './icons'
+import { Broadcast, Clock, NotePencil, PencilSimple, ShieldCheck, Sparkle } from './icons'
 import type { AIResult, MessageDraft, MessageFacts, ReportRead } from '../ai/types'
 
 type Sec = 'verify' | 'assess' | 'response' | 'clear' | 'close' | 'timeline'
@@ -393,12 +393,121 @@ function AssignmentRow({ inc, asId }: { inc: Incident; asId: string }) {
 }
 
 // ---------------- Clear ----------------
+// One job: get the road open. The scene question leads as the only filled button; the diversion and the public
+// message are someone else's to approve, so they read as status and only ask for a click when the operator owns it.
 function ClearSection({ inc, lead }: { inc: Incident; lead: boolean }) {
   const S = useSim()
   const d = inc.diversion
   const msg = [...inc.messages].reverse().find(m => m.status !== 'withdrawn') ?? inc.messages.at(-1)
-  const [draft, setDraft] = useState<string | null>(null)
+  const done = isTerminal(inc)
+  const reopened = (inc.state === 'Road clear' || done) && (d?.status === 'lifted' || msg?.status === 'withdrawn')
+  const summary = [d && d.status !== 'lifted' ? `Diversion ${d.status}` : null, msg && msg.status !== 'withdrawn' ? `message ${msg.status}` : null].filter(Boolean).join(' · ') || (reopened ? 'Traffic reopened' : done ? 'Done' : 'Nothing set up')
+  return (
+    <Section id="clear" inc={inc} title="Clear" summary={summary} lead={lead}>
+      {!done && <NextStep inc={inc} />}
+      {!done && <TrafficStatus inc={inc} />}
+      {(msg || !done) && <MessageBlock inc={inc} />}
+      <Pendings inc={inc} prefixes={['Request', 'Approve', 'Lift', 'Save message', 'Publish', 'Withdraw', 'Adapt']} />
+      {S.role === 'liaison' && !done && <p className="small muted" style={{ marginTop: 8 }}>Read only in the liaison seat.</p>}
+    </Section>
+  )
+}
+
+type Hero = { key: string; title: string; sub: ReactNode; cmd?: { label: string; prefix: string; run: () => void } }
+function heroFor(inc: Incident, S: State): Hero {
+  const onScene = inc.assignments.filter(a => !a.released && lastConf(a).state === 'On scene')
+  const asker = (onScene.find(a => S.units[a.unitId].type === 'patrol') ?? onScene[0])?.unitId
+  const pf = inc.pendingField
+  if (pf) return { key: `wait-${pf.want}`, title: `Asked ${pf.unitId} ${pf.want === 'Clearing' ? 'if recovery has started' : 'if all lanes are open'}`,
+    sub: <span className="next-wait"><Spinner /> Waiting for a radio reply · <span className="num">{fmtAge(S.now - pf.at)}</span></span> }
+  if (inc.state === 'Road clear') {
+    const div = inc.diversion?.status === 'active', live = inc.messages.find(m => m.status === 'published')
+    if (!div && !live) return { key: 'reopened', title: 'All lanes open, confirmed', sub: 'Traffic is back to normal. Close the incident next.' }
+    return { key: 'reopen', title: 'All lanes open, confirmed', sub: div && live ? 'Lift the diversion and take the public message down.' : div ? 'Lift the diversion.' : 'Take the public message down.',
+      cmd: { label: 'Reopen traffic', prefix: div ? 'Lift diversion' : 'Withdraw', run: () => { if (div) E.liftDiversion(inc.id); if (live) E.withdrawMessage(inc.id, live.id) } } }
+  }
+  if (!asker) return { key: 'arriving', title: 'Waiting for units on scene', sub: 'This step starts when the first unit arrives.' }
+  if (inc.state === 'Clearing') return { key: 'clearing', title: 'Recovery under way', sub: `Ask ${asker} to confirm all lanes are open.`,
+    cmd: { label: 'Ask: all lanes open?', prefix: 'Request road clear', run: () => E.requestFieldStatus(inc.id, 'Road clear') } }
+  return { key: 'onscene', title: `${asker} is on scene`, sub: 'Radio them to confirm recovery has started.',
+    cmd: { label: 'Ask: recovery started?', prefix: 'Request clearing', run: () => E.requestFieldStatus(inc.id, 'Clearing') } }
+}
+
+function NextStep({ inc }: { inc: Incident }) {
+  const S = useSim()
+  const h = heroFor(inc, S)
+  const reduce = useReducedMotion()
+  return (
+    <div className={`next ${h.cmd ? '' : 'is-quiet'}`} aria-live="polite">
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div key={h.key} className="next-body"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, filter: 'blur(2px)', transform: 'translateY(4px)' }}
+          animate={{ opacity: 1, filter: 'blur(0px)', transform: 'translateY(0px)' }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, filter: 'blur(2px)', transform: 'translateY(-4px)' }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}>
+          <div className="next-text"><div className="next-title">{h.title}</div><div className="next-sub">{h.sub}</div></div>
+          {h.cmd && <Cmd inc={inc} prefix={h.cmd.prefix} kind="primary" onClick={h.cmd.run} disabled={S.role === 'liaison'}>{h.cmd.label}</Cmd>}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// Diversion + public message, grouped by who holds them now. Same-status items share one line.
+function TrafficStatus({ inc }: { inc: Incident }) {
+  const S = useSim()
+  const d = inc.diversion
+  const msg = inc.messages.find(m => m.status === 'draft' || m.status === 'approved' || m.status === 'published')
+  const sup = S.role === 'supervisor', lia = S.role === 'liaison'
+  const waiting = [d?.status === 'awaiting approval' && 'Diversion', msg?.status === 'draft' && 'message'].filter(Boolean) as string[]
+  const live = [d?.status === 'active' && 'Diversion active', msg?.status === 'published' && 'message live'].filter(Boolean) as string[]
+  const since = Math.min(...[d?.status === 'awaiting approval' ? d.updatedAt : Infinity, msg?.status === 'draft' ? msg.updatedAt : Infinity])
+  if (!waiting.length && !live.length && msg?.status !== 'approved' && d?.status !== 'proposed') return null
+  const join = (xs: string[]) => xs.map((x, i) => i === 0 ? x[0].toUpperCase() + x.slice(1) : x).join(' and ')
+  return (
+    <ul className="tstat" aria-label="Diversion and public message">
+      {d?.status === 'proposed' && <li><Clock size={16} weight="bold" className="tstat-ic" aria-hidden />
+        <span className="tstat-txt"><span className="tstat-h">Diversion not sent</span><span className="tstat-d">{d.label}</span></span>
+        <Cmd inc={inc} prefix="Request diversion" kind="sm" onClick={() => E.requestDiversionApproval(inc.id)} disabled={lia}>Send to supervisor</Cmd></li>}
+      {waiting.length > 0 && <li><Clock size={16} weight="bold" className="tstat-ic" aria-hidden />
+        <span className="tstat-txt"><span className="tstat-h">{join(waiting)} with supervisor</span>{d?.status === 'awaiting approval' && <span className="tstat-d">{d.label}</span>}</span>
+        {sup ? <Cmd inc={inc} prefix="Approve" kind="sm" onClick={() => { if (d?.status === 'awaiting approval') E.approveDiversion(inc.id); if (msg?.status === 'draft') E.approveMessage(inc.id, msg.id) }}>Approve</Cmd>
+          : <span className="tstat-age num">{fmtAge(S.now - since)}</span>}</li>}
+      {msg?.status === 'approved' && <li><ShieldCheck size={16} weight="bold" className="tstat-ic ok" aria-hidden />
+        <span className="tstat-txt"><span className="tstat-h">Message approved</span><span className="tstat-d">Ready for the public traffic feed</span></span>
+        <Cmd inc={inc} prefix="Publish" kind="sm" onClick={() => E.publishMessage(inc.id, msg.id)} disabled={lia}>Publish</Cmd></li>}
+      {live.length > 0 && <li><Broadcast size={16} weight="bold" className="tstat-ic ok" aria-hidden />
+        <span className="tstat-txt"><span className="tstat-h">{join(live)}</span>{d?.status === 'active' && <span className="tstat-d">{d.label}</span>}</span></li>}
+    </ul>
+  )
+}
+
+// The message reads as text; editing is one click away and happens in place.
+function MessageBlock({ inc }: { inc: Incident }) {
+  const S = useSim()
+  const msg = [...inc.messages].reverse().find(m => m.status !== 'withdrawn') ?? inc.messages.at(-1)
+  const [editing, setEditing] = useState(false)
+  const done = isTerminal(inc), lia = S.role === 'liaison'
+  const editable = !done && !lia && (!msg || msg.status === 'draft' || msg.status === 'approved')
+  if (editing) return <div className="clear-msg"><div className="msg-head"><span className="label">Public message</span></div><MessageComposer inc={inc} onDone={() => setEditing(false)} /></div>
+  if (!msg) return editable ? <div className="clear-msg"><button className="link-btn" onClick={() => setEditing(true)}><PencilSimple size={14} weight="bold" aria-hidden /> Write a public message</button></div> : null
+  return (
+    <div className="clear-msg">
+      <div className="msg-head">
+        <span className="label">Public message</span>
+        {editable && <button className="link-btn" onClick={() => setEditing(true)} aria-label="Edit public message"><PencilSimple size={14} weight="bold" aria-hidden /> Edit</button>}
+      </div>
+      <p className={`msg-preview ${msg.status === 'withdrawn' ? 'muted' : ''}`}>{msg.text}</p>
+    </div>
+  )
+}
+
+function MessageComposer({ inc, onDone }: { inc: Incident; onDone: () => void }) {
+  const msg = [...inc.messages].reverse().find(m => m.status !== 'withdrawn')
+  const [draft, setDraft] = useState<string>(msg?.text ?? '')
   const [ai, setAi] = useState<{ loading: boolean; res?: AIResult<MessageDraft>; lang: 'english' | 'pidgin' | 'yoruba'; edited: boolean }>({ loading: false, lang: 'english', edited: false })
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { const t = ref.current; if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length) } }, [])
   const runAI = async () => {
     setAi(a => ({ ...a, loading: true }))
     const res = await draftMessage(messageFacts(inc))
@@ -406,69 +515,37 @@ function ClearSection({ inc, lead }: { inc: Incident; lead: boolean }) {
     setDraft(res.data.english)
   }
   const pickLang = (lang: 'english' | 'pidgin' | 'yoruba') => { const t = ai.res?.data[lang]; if (t) { setAi(a => ({ ...a, lang, edited: false })); setDraft(t) } }
-  const saveDraft = (text: string) => {
-    E.draftMessage(inc.id, text)
+  const text = draft.trim(), changed = text !== '' && draft !== msg?.text
+  const save = () => {
+    if (!changed) return
+    E.draftMessage(inc.id, draft)
     if (ai.res) E.logAI(inc.id, `Public message drafted with AI (${ai.lang}${ai.edited ? ', edited by operator' : ''}). Facts used: ${ai.res.data.used.join(', ')}.`)
-    setDraft(null); setAi(a => ({ ...a, res: undefined }))
+    onDone()
   }
-  const sup = S.role === 'supervisor'
-  const lia = S.role === 'liaison'
-  const onScene = inc.assignments.some(a => !a.released && lastConf(a).state === 'On scene')
-  const done = isTerminal(inc)
-  const summary = [d && d.status !== 'lifted' ? `Diversion ${d.status}` : null, msg && msg.status !== 'withdrawn' ? `message ${msg.status}` : null].filter(Boolean).join(' · ') || (done ? 'Done' : 'Nothing set up')
   return (
-    <Section id="clear" inc={inc} title="Clear" summary={summary} lead={lead}>
-      {!done && <div className="clear-row">
-        <div><div className="label">Scene</div><div className="small muted">{inc.state === 'Road clear' ? 'All lanes open, confirmed' : inc.state === 'Clearing' ? 'Recovery under way' : onScene ? 'Units on scene' : 'Waiting for units on scene'}</div></div>
-        {inc.pendingField ? <div className="pending-line" style={{ marginTop: 0 }}><Spinner />Waiting for {inc.pendingField.unitId} · {fmtAge(S.now - inc.pendingField.at)}</div>
-          : inc.state === 'On scene' ? <Cmd inc={inc} prefix="Request clearing" kind="primary" onClick={() => E.requestFieldStatus(inc.id, 'Clearing')} disabled={!onScene || lia}>Ask: recovery started?</Cmd>
-          : inc.state === 'Clearing' ? <Cmd inc={inc} prefix="Request road clear" kind="primary" onClick={() => E.requestFieldStatus(inc.id, 'Road clear')} disabled={lia}>Ask: all lanes open?</Cmd>
-          : null}
-      </div>}
-      {d && d.status !== 'lifted' && <div className="clear-row">
-        <div><div className="label">Diversion <span className={`chip ${d.status === 'active' ? 'accent' : 'outline'}`} style={{ marginLeft: 4 }}>{d.status}</span></div><div className="small muted">{d.label}</div></div>
-        {!done && (d.status === 'proposed' ? <Cmd inc={inc} prefix="Request diversion" onClick={() => E.requestDiversionApproval(inc.id)} disabled={lia}>Send for approval</Cmd>
-          : d.status === 'awaiting approval' ? (sup ? <Cmd inc={inc} prefix="Approve diversion" kind="primary" onClick={() => E.approveDiversion(inc.id)}>Approve</Cmd> : <SwitchToSupervisor />)
-          : <Cmd inc={inc} prefix="Lift diversion" kind={inc.state === 'Road clear' ? 'primary' : ''} onClick={() => E.liftDiversion(inc.id)} disabled={lia}>Lift</Cmd>)}
-      </div>}
-      {(msg || !done) && <div className="clear-msg">
-        <div className="label">Public message {msg && <span className={`chip ${msg.status === 'published' ? 'accent' : 'outline'}`} style={{ marginLeft: 4 }}>{msg.status}</span>}</div>
-        {msg && (msg.status === 'published' || done) ? <p className="msg-read">{msg.text}</p> : (
-          <div className={`composer ${lia ? 'is-disabled' : ''}`} onClick={e => { if ((e.target as HTMLElement).classList.contains('composer')) (e.currentTarget.querySelector('textarea') as HTMLTextAreaElement | null)?.focus() }}>
-            {ai.res && draft !== null && !ai.loading && <motion.div className="ai-meta" initial={{ opacity: 0, filter: 'blur(2px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
-              <AIBadge mode={ai.res.mode} edited={ai.edited} />
-              <div className="seg" role="group" aria-label="Language">
-                {(['english', 'pidgin', 'yoruba'] as const).map(l => <button key={l} aria-pressed={ai.lang === l} disabled={!ai.res!.data[l]} title={!ai.res!.data[l] ? (ai.res!.mode === 'demo' ? 'Yoruba needs live AI and a fluent reviewer' : 'Not confident enough to draft Yoruba') : undefined} onClick={() => pickLang(l)}>{l[0].toUpperCase() + l.slice(1)}</button>)}
-              </div>
-              <span className="small muted">Used: {ai.res.data.used.join(', ')}</span>
-            </motion.div>}
-            {ai.loading
-              ? <div className="ai-loading composer-loading"><div className="skel" style={{ height: 14, width: '92%' }} /><div className="skel" style={{ height: 14, width: '64%' }} /><span className="small"><Spark /> Drafting from the confirmed facts…</span></div>
-              : <motion.textarea key={ai.res ? `ai-${ai.lang}` : 'own'} className="composer-input" rows={3} disabled={lia}
-                  initial={ai.res ? { opacity: 0, filter: 'blur(2px)' } : false} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  value={draft ?? msg?.text ?? ''} placeholder="Tell drivers what’s happening and which way to go…" aria-label="Public message"
-                  onChange={e => { setDraft(e.target.value); if (ai.res) setAi(a => ({ ...a, edited: true })) }} />}
-            {ai.res && draft !== null && ai.res.data.caution && !ai.loading && <p className="small composer-caution">{ai.res.data.caution}</p>}
-            <div className="composer-bar">
-              <button className="btn ghost sm ai-btn" onClick={runAI} disabled={lia || ai.loading}><Spark /> {ai.res || msg ? 'Redraft with AI' : 'Draft with AI'}</button>
-              <span className="spacer" style={{ flex: 1 }} />
-              {draft !== null && ai.res && !ai.loading && <button className="btn ghost sm" onClick={() => { setDraft(null); setAi(a => ({ ...a, res: undefined })) }}>Discard</button>}
-              {(() => {
-                const text = (draft ?? '').trim()
-                const changed = draft !== null && text !== '' && draft !== msg?.text
-                return <Cmd inc={inc} prefix="Save message" kind="primary" disabled={!changed || lia || ai.loading} onClick={() => saveDraft(draft!)}>{ai.res && changed ? 'Use this draft' : msg ? 'Save changes' : 'Save draft'}</Cmd>
-              })()}
-            </div>
-          </div>
-        )}
-        {!done && msg && draft === null && <div className="actions" style={{ marginTop: 8 }}>
-          {msg.status === 'draft' && (sup ? <Cmd inc={inc} prefix="Approve public" kind="primary" onClick={() => E.approveMessage(inc.id, msg.id)}>Approve</Cmd> : <SwitchToSupervisor />)}
-          {msg.status === 'approved' && <Cmd inc={inc} prefix="Publish" kind="primary" onClick={() => E.publishMessage(inc.id, msg.id)} disabled={lia}>Publish</Cmd>}
-          {msg.status === 'published' && <Cmd inc={inc} prefix="Withdraw" kind={inc.state === 'Road clear' ? 'primary' : ''} onClick={() => E.withdrawMessage(inc.id, msg.id)}>Withdraw</Cmd>}
-        </div>}
-      </div>}
-      <Pendings inc={inc} prefixes={['Request', 'Approve', 'Lift', 'Save message', 'Publish', 'Withdraw', 'Adapt']} />
-    </Section>
+    <div className="composer" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onDone() } if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save() }}
+      onClick={e => { if ((e.target as HTMLElement).classList.contains('composer')) ref.current?.focus() }}>
+      {ai.res && !ai.loading && <motion.div className="ai-meta" initial={{ opacity: 0, filter: 'blur(2px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
+        <AIBadge mode={ai.res.mode} edited={ai.edited} />
+        <div className="seg" role="group" aria-label="Language">
+          {(['english', 'pidgin', 'yoruba'] as const).map(l => <button key={l} aria-pressed={ai.lang === l} disabled={!ai.res!.data[l]} title={!ai.res!.data[l] ? (ai.res!.mode === 'demo' ? 'Yoruba needs live AI and a fluent reviewer' : 'Not confident enough to draft Yoruba') : undefined} onClick={() => pickLang(l)}>{l[0].toUpperCase() + l.slice(1)}</button>)}
+        </div>
+        <span className="small muted">Used: {ai.res.data.used.join(', ')}</span>
+      </motion.div>}
+      {ai.loading
+        ? <div className="ai-loading composer-loading"><div className="skel" style={{ height: 14, width: '92%' }} /><div className="skel" style={{ height: 14, width: '64%' }} /><span className="small"><Spark /> Drafting from the confirmed facts…</span></div>
+        : <motion.textarea ref={ref} key={ai.res ? `ai-${ai.lang}` : 'own'} className="composer-input" rows={3}
+            initial={ai.res ? { opacity: 0, filter: 'blur(2px)' } : false} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            value={draft} placeholder="Tell drivers what’s happening and which way to go…" aria-label="Public message"
+            onChange={e => { setDraft(e.target.value); if (ai.res) setAi(a => ({ ...a, edited: true })) }} />}
+      {ai.res && ai.res.data.caution && !ai.loading && <p className="small composer-caution">{ai.res.data.caution}</p>}
+      <div className="composer-bar">
+        <button className="btn ghost sm ai-btn" onClick={runAI} disabled={ai.loading}><Spark /> {ai.res || msg ? 'Redraft with AI' : 'Draft with AI'}</button>
+        <span className="spacer" style={{ flex: 1 }} />
+        <button className="btn ghost sm" onClick={onDone}>Cancel</button>
+        <Cmd inc={inc} prefix="Save message" kind="primary sm" disabled={!changed || ai.loading} onClick={save}>Send to supervisor</Cmd>
+      </div>
+    </div>
   )
 }
 
@@ -559,9 +636,6 @@ function RecommendedTeam({ inc, want, suggested, canDispatch, playbook }: { inc:
 }
 
 /** Approval belongs to another seat. In the prototype you can take that seat; in production this would notify the supervisor. */
-function SwitchToSupervisor() {
-  return <button className="btn sm ghost" onClick={() => E.setRole('supervisor')} title="Approvals need the supervisor seat">Needs supervisor · switch seat</button>
-}
 
 // ---------------- AI assists ----------------
 export const Spark = () => <Sparkle size={13} weight="fill" aria-hidden />

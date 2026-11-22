@@ -9,7 +9,7 @@ const ICONS = {
   ChartBar: [], ChartLine: [], Check: [], ClipboardText: [], FireTruck: [], Flag: [], FlowArrow: [], Lifebuoy: [], Lightning: ['fill'],
   Link: [], MagnifyingGlass: [], MapTrifold: [], Megaphone: [], Moon: [], NotePencil: [], Pause: [], Phone: [], Play: [], Siren: [],
   Sparkle: ['fill'], SquaresFour: [], Sun: [], Truck: [], User: [], UsersThree: [], VideoCamera: [], Warning: [], WarningCircle: ['fill'],
-  WifiHigh: [], X: [],
+  WifiHigh: [], X: [], Clock: [], Radio: [], ShieldCheck: [], PencilSimple: [],
   // status glyphs, loading and form chrome
   Triangle: ['fill'], Diamond: ['duotone'], Circle: [], CircleNotch: [], CaretDown: [], VideoCameraSlash: [],
 }

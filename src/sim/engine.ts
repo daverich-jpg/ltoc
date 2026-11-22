@@ -250,9 +250,10 @@ export function activatePlaybook(incId: string, pbId: string) {
   const inc = S.incidents[incId], pb = S.playbooks.find(p => p.id === pbId)!
   command(`Activate playbook ${pbId}`, incId, () => {
     inc.playbookId = pbId
-    inc.diversion = { playbookId: pbId, label: pb.diversion.label, segs: pb.diversion.segs, closes: pb.diversion.closes, status: 'proposed', updatedAt: S.now }
+    // Dispatching with the playbook is the operator's intent, so the diversion and draft go straight to the supervisor.
+    inc.diversion = { playbookId: pbId, label: pb.diversion.label, segs: pb.diversion.segs, closes: pb.diversion.closes, status: 'awaiting approval', updatedAt: S.now }
     inc.messages = [...inc.messages, { id: id('msg'), text: pb.message, status: 'draft', channel: 'LTOC public traffic feed (simulated)', updatedAt: S.now }]
-    log(inc, 'diversion', `Playbook ${pb.id} applied. Diversion proposed: ${pb.diversion.label}. Draft public message created.`, actorName(), 'console')
+    log(inc, 'diversion', `Playbook ${pb.id} applied. Diversion (${pb.diversion.label}) and draft public message sent to supervisor.`, actorName(), 'console')
     for (const ag of pb.notify) {
       log(inc, 'notify', `Notification sent to ${ag} desk.`, actorName(), 'terminal')
       after(15 + Math.random() * 30, () => log(S.incidents[incId], 'notify', `${ag} desk acknowledged the notification.`, ag, 'terminal'))
@@ -262,7 +263,7 @@ export function activatePlaybook(incId: string, pbId: string) {
 }
 export function editDiversion(incId: string, segs: string[]) {
   const inc = S.incidents[incId]
-  command('Adapt diversion', incId, () => { if (inc.diversion) { inc.diversion = { ...inc.diversion, segs, status: 'proposed', updatedAt: S.now }; log(inc, 'diversion', `Diversion adapted: ${segs.length} segments.`, actorName(), 'console') } })
+  command('Adapt diversion', incId, () => { if (inc.diversion) { inc.diversion = { ...inc.diversion, segs, status: 'awaiting approval', updatedAt: S.now }; log(inc, 'diversion', `Diversion adapted: ${segs.length} segments. Sent back to supervisor.`, actorName(), 'console') } })
 }
 export function requestDiversionApproval(incId: string) {
   const inc = S.incidents[incId]
@@ -371,8 +372,28 @@ export function tick(realMs: number) {
   advance(realMs * S.speed)
   emit()
 }
+// The supervisor is another person on shift. Simulated here: anything waiting on them is reviewed after a short
+// delay, unless the user is sitting in the supervisor seat (then they decide) or autopilot is driving.
+export const SUPERVISOR_REVIEW_SEC = 25
+function supervisorStep() {
+  if (S.autopilot || S.role === 'supervisor') return
+  for (const inc of Object.values(S.incidents)) {
+    if (inc.state === 'Closed' || inc.state === 'Dismissed' || inc.state === 'Merged') continue
+    const d = inc.diversion
+    if (d?.status === 'awaiting approval' && S.now - d.updatedAt > SUPERVISOR_REVIEW_SEC * 1000) {
+      inc.diversion = { ...d, status: 'active', updatedAt: S.now }
+      log(inc, 'diversion', `Diversion approved and active. Closed: ${d.closes.map(s => segById[s].name).join(', ') || 'none'}.`, 'Supervisor (Shift B)', 'console')
+    }
+    const m = inc.messages.find(x => x.status === 'draft')
+    if (m && S.now - m.updatedAt > SUPERVISOR_REVIEW_SEC * 1000) {
+      setMsg(inc, m.id, { status: 'approved', approver: 'Supervisor (Shift B)' })
+      log(inc, 'message', 'Public message approved.', 'Supervisor (Shift B)', 'console')
+    }
+  }
+}
 function advance(ms: number) {
   if (S.autopilot) autopilotStep()
+  supervisorStep()
   const target = S.now + ms
   for (;;) {
     queue.sort((a, b) => a.at - b.at)
