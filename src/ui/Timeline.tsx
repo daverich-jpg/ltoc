@@ -1,19 +1,21 @@
-// Incident timeline as a time track (after the "workflow plan" moodboard):
-// state bars on top, one bar per unit, and small icon markers for everything else.
-// The detail lives in a hover/focus card, so the track itself stays quiet.
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Ambulance, ArrowsSplit, BellRinging, Broadcast, Car, ClipboardText, FireTruck, Flag, Lifebuoy, Megaphone, NotePencil, Siren, Sparkle, Truck, WarningCircle, Lightning } from './icons'
+// Incident timeline, after the moodboard:
+// 1. Units: a small Gantt. Callsign and status on the left, one bar per unit on a shared time axis
+//    (hatched until acknowledged, green once on scene), with a Now line.
+// 2. Log: events grouped under the phase they happened in, newest phase first, on one connector line.
+//    Finished phases fold to a count; the current phase stays open. Rows stay quiet until hovered.
+import { useState } from 'react'
+import { Ambulance, ArrowsSplit, BellRinging, Broadcast, CaretDown, Car, ClipboardText, FireTruck, Flag, Lifebuoy, Lightning, Megaphone, NotePencil, Siren, Sparkle, Truck, WarningCircle } from './icons'
 import type { Incident, TimelineEvent, UnitType } from '../sim/types'
-import { lastConf } from '../sim/derive'
+import { assignmentOverdue, lastConf } from '../sim/derive'
 import { fmtTime } from './bits'
 import { useSim } from './store'
 
-const short = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` }
+const short = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} m` : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} m` }
 const UNIT_ICON: Record<UnitType, typeof Car> = { patrol: Car, rescue: Lifebuoy, ambulance: Ambulance, fire: FireTruck, police: Siren, recovery: Truck }
 
 type Cat = { key: string; label: string; icon: typeof Car }
 function categoryOf(e: TimelineEvent): Cat | null {
-  if (e.kind === 'state' || e.kind === 'unit' || e.kind === 'assign') return null // drawn as bars
+  if (e.kind === 'state') return null // phases are the headings
   if (e.actor.includes('AI suggestion')) return { key: 'ai', label: 'AI assist', icon: Sparkle }
   switch (e.kind) {
     case 'note': return { key: 'note', label: 'Note', icon: NotePencil }
@@ -23,126 +25,126 @@ function categoryOf(e: TimelineEvent): Cat | null {
     case 'notify': return /acknowledged/.test(e.text) ? null : { key: 'notify', label: 'Agency notified', icon: BellRinging }
     case 'failure': return { key: 'failure', label: 'Failed command', icon: WarningCircle }
     case 'source': return { key: 'source', label: 'Report', icon: Broadcast }
+    // unit progress lives in the lanes above; the log keeps only dispatches and anything unusual
+    case 'assign': case 'unit': return /position report|acknowledged|en route|on scene\. Confirmed/i.test(e.text) ? null : { key: 'unit', label: 'Units', icon: Truck }
     case 'system': return /overdue|Raised to Act now/.test(e.text) ? { key: 'alert', label: 'Escalation', icon: Lightning } : { key: 'system', label: 'Field request', icon: Flag }
     default: return null
   }
 }
 
-interface Tip { x: number; y: number; title: string; time: string; body: ReactNode }
-
 export function TimelineTrack({ inc }: { inc: Incident }) {
+  return <div className="tlx">{inc.assignments.length > 0 && <UnitLanes inc={inc} />}<PhaseLog inc={inc} /></div>
+}
+
+// ---------- 1. Units ----------
+function UnitLanes({ inc }: { inc: Incident }) {
   const S = useSim()
-  const ref = useRef<HTMLDivElement>(null)
-  const [w, setW] = useState(600)
-  const [tip, setTip] = useState<Tip | null>(null)
-  const lastClose = useRef(0)
-  const timer = useRef<number>(0)
-  useLayoutEffect(() => {
-    const el = ref.current!; const ro = new ResizeObserver(() => setW(el.clientWidth)); ro.observe(el); setW(el.clientWidth)
-    return () => ro.disconnect()
-  }, [])
-
-  const t0 = inc.createdAt
   const live = !inc.closedAt
-  const t1 = Math.max(inc.closedAt ?? S.now, t0 + 60000)
-  const pad = 8
-  const X = (t: number) => pad + ((t - t0) / (t1 - t0)) * (w - pad * 2)
-
-  // tooltip: short delay for the first one, instant while moving between markers
-  const show = (t: Tip) => { clearTimeout(timer.current); const warm = Date.now() - lastClose.current < 400; if (warm || tip) setTip(t); else timer.current = window.setTimeout(() => setTip(t), 140) }
-  const hide = () => { clearTimeout(timer.current); if (tip) lastClose.current = Date.now(); setTip(null) }
-  const hov = (t: Omit<Tip, 'x' | 'y'>, x: number, y: number) => ({
-    onMouseEnter: () => show({ ...t, x, y }), onMouseLeave: hide, onFocus: () => setTip({ ...t, x, y }), onBlur: hide,
-  })
-
-  // state bars
-  const states = inc.timeline.filter(e => e.kind === 'state' && e.text.startsWith('State →')).map(e => ({ e, name: e.text.slice(8).split('.')[0] }))
-  const stateBars = states.map((s, i) => ({ ...s, start: s.e.at, end: states[i + 1]?.e.at ?? t1, current: i === states.length - 1 })).filter(b => b.name !== 'Closed' || b.end > b.start)
-
-  // unit bars
-  const units = inc.assignments.map(a => {
-    const u = S.units[a.unitId]
-    const at = (st: string) => a.history.find(h => h.state === st)?.at
-    const start = a.history[0].at, ack = at('Acknowledged'), onScene = at('On scene')
-    return { a, u, start, ack, onScene, end: onScene ?? t1, last: lastConf(a) }
-  })
-
-  // event markers, packed into rows so they never overlap
-  const marks = inc.timeline.map(e => ({ e, c: categoryOf(e) })).filter((m): m is { e: TimelineEvent; c: Cat } => !!m.c)
-  // Events within ~26px of each other share one marker (icon of the first, a count, all of them in the hover card).
-  // Two rows at most, so a busy minute never makes the track tall.
-  type Group = { x: number; r: number; items: { e: TimelineEvent; c: Cat }[] }
-  const groups: Group[] = []
-  const rowEnd = [-Infinity, -Infinity]
-  for (const m of marks) {
-    const x = X(m.e.at)
-    const r = rowEnd.findIndex(end => x - end > 26)
-    if (r !== -1) { groups.push({ x, r, items: [m] }); rowEnd[r] = x; continue }
-    const near = groups.filter(g => Math.abs(g.x - x) <= 26).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0] ?? groups[groups.length - 1]
-    near.items.push(m)
-  }
-  const rows = [0, 1].filter(r => groups.some(g => g.r === r))
-
-  const LANE = 34, top = 30
-  const unitTop = top + LANE + 6
-  const markTop = unitTop + units.length * LANE + (units.length ? 10 : 0)
-  const height = markTop + Math.max(1, rows.length) * 28 + 6
-
-  // axis ticks
+  const t0 = Math.min(...inc.assignments.map(a => a.history[0].at))
+  const t1 = Math.max(inc.closedAt ?? S.now, t0 + 120000)
+  const pct = (t: number) => ((t - t0) / (t1 - t0)) * 100
   const span = t1 - t0
-  const step = [60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3].find(s => span / s <= 5) ?? 7200e3
+  const step = [60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3].find(s => span / s <= 4) ?? 7200e3
   const ticks: number[] = []
-  for (let t = Math.ceil(t0 / step) * step; t < t1 - step * 0.35; t += step) ticks.push(t)
+  for (let t = Math.ceil(t0 / step) * step; t < t1; t += step) if (pct(t) > 20 && pct(t) < 82) ticks.push(t)
+  const grid = <>{ticks.map(t => <i key={t} className="tlx-grid" style={{ left: `${pct(t)}%` }} />)}{live && <i className="tlx-now" style={{ left: '100%' }} />}</>
 
   return (
-    <div className="track" ref={ref} style={{ height }} onMouseLeave={hide}>
-      <div className="track-axis">
-        <span className="tick" style={{ left: X(t0) }}>{fmtTime(t0, false)}</span>
-        {ticks.filter(t => X(t) - X(t0) > 46 && X(t1) - X(t) > 46).map(t => <span key={t} className="tick" style={{ left: X(t) }}>{fmtTime(t, false)}</span>)}
-        <span className={`tick end ${live ? 'now' : ''}`} style={{ left: X(t1) }}>{live ? 'Now' : fmtTime(t1, false)}</span>
+    <div className="tlx-lanes" role="table" aria-label="Units over time">
+      <div className="tlx-lane-label tlx-axis-label" role="columnheader">Units</div>
+      <div className="tlx-axis" role="columnheader" aria-hidden>
+        <span style={{ left: 0 }}>{fmtTime(t0, false)}</span>
+        {ticks.map(t => <span key={t} className="mid" style={{ left: `${pct(t)}%` }}>{fmtTime(t, false)}</span>)}
+        <span className={`end ${live ? 'now' : ''}`} style={{ left: '100%' }}>{live ? 'Now' : fmtTime(t1, false)}</span>
       </div>
-      {live && <div className="now-line" style={{ left: X(t1) }} aria-hidden />}
-      {ticks.map(t => <div key={t} className="grid-line" style={{ left: X(t) }} aria-hidden />)}
-
-      {stateBars.map(b => {
-        const x = X(b.start), bw = Math.max(10, X(b.end) - x - 2), roomy = bw > 92
-        return <button key={b.e.id} className={`bar state ${b.current ? 'current' : ''}`} style={{ left: x, top, width: bw }}
-          aria-label={`${b.name}, ${short(b.end - b.start)}`} {...hov({ title: b.name, time: `${fmtTime(b.start)} · ${short(b.end - b.start)}`, body: <>{b.e.text.replace(/^State → [^.]+\.\s*/, '') || 'State change'}<span className="tip-who">{b.e.actor}</span></> }, x + bw / 2, top)}>
-          {roomy && <span className="bar-label">{b.name}</span>}
-          {bw > 150 && <span className="badge">{short(b.end - b.start)}</span>}
-        </button>
+      {inc.assignments.map(a => {
+        const u = S.units[a.unitId]
+        const at = (st: string) => a.history.find(h => h.state === st)?.at
+        const start = a.history[0].at, ack = at('Acknowledged'), onScene = at('On scene')
+        const end = onScene ?? t1
+        const overdue = !a.released && assignmentOverdue(a, S)
+        const status = onScene ? `On scene in ${short(onScene - start)}` : a.released ? 'Released' : overdue ? 'No acknowledgement' : ack ? 'En route' : 'Dispatched'
+        const Icon = UNIT_ICON[u.type]
+        const w = Math.max(pct(end) - pct(start), 0.5)
+        const ackPct = ack ? ((ack - start) / Math.max(end - start, 1)) * 100 : 100
+        return (
+          <div key={a.id} className="tlx-row" role="row">
+            <div className="tlx-lane-label" role="cell">
+              <Icon size={16} weight="bold" className="tlx-unit-ic" aria-hidden />
+              <span className="tlx-unit"><span className="tlx-callsign">{u.callsign}</span><span className={`tlx-status ${overdue ? 'late' : ''}`}>{status}</span></span>
+            </div>
+            <div className="tlx-track" role="cell" aria-label={`${u.callsign}: ${a.history.map(h => `${h.state} ${fmtTime(h.at, false)}`).join(', ')}`}>
+              {grid}
+              <span className={`tlx-bar ${onScene ? 'arrived' : ''} ${overdue ? 'late' : ''}`} style={{ left: `${pct(start)}%`, width: `${w}%`, ['--ack' as string]: `${ackPct}%` }}
+                title={a.history.map(h => `${fmtTime(h.at)}  ${h.state} · ${h.channel}`).join('\n')} />
+              {onScene && <span className="tlx-pin" style={{ left: `${pct(onScene)}%` }} aria-hidden />}
+            </div>
+          </div>
+        )
       })}
-
-      {units.map((r, i) => {
-        const y = unitTop + i * LANE, x = X(r.start), bw = Math.max(14, X(r.end) - x - 2)
-        const ackX = r.ack ? Math.min(bw, X(r.ack) - x) : bw
-        const Icon = UNIT_ICON[r.u.type]
-        return <button key={r.a.id} className={`bar unit ${r.onScene ? 'arrived' : ''}`} style={{ left: x, top: y, width: bw, ['--ack' as string]: `${(ackX / bw) * 100}%` }}
-          aria-label={`${r.u.callsign}, ${r.last.state}`} {...hov({ title: `${r.u.callsign} · ${r.a.role}`, time: r.onScene ? `On scene after ${short(r.onScene - r.start)}` : r.last.state, body: <ul className="tip-list">{r.a.history.map(h => <li key={h.state}><span>{fmtTime(h.at)}</span>{h.state} · {h.channel}</li>)}</ul> }, x + bw / 2, y)}>
-          <Icon size={14} weight="bold" className="bar-icon" />
-          {bw > 64 && <span className="bar-label">{r.u.callsign}</span>}
-          {bw > 140 && <span className="badge">{r.onScene ? short(r.onScene - r.start) : r.last.state === 'Dispatched' ? 'no ack' : r.last.state.toLowerCase()}</span>}
-        </button>
-      })}
-
-      {groups.map(g => {
-        const lead = g.items.find(i => i.c.key === 'alert' || i.c.key === 'failure') ?? g.items[0]
-        const Icon = lead.c.icon
-        const y = markTop + g.r * 28
-        const many = g.items.length > 1
-        return <button key={lead.e.id} className={`mark c-${lead.c.key} ${many ? 'many' : ''}`} style={{ left: g.x - 11, top: y }} aria-label={many ? `${g.items.length} events around ${fmtTime(lead.e.at)}` : `${lead.c.label} at ${fmtTime(lead.e.at)}`}
-          {...hov(many
-            ? { title: `${g.items.length} events`, time: `${fmtTime(g.items[0].e.at, false)}–${fmtTime(g.items[g.items.length - 1].e.at, false)}`, body: <ul className="tip-list">{g.items.map(i => <li key={i.e.id}><span>{fmtTime(i.e.at)}</span>{i.c.label}: {i.e.text.length > 70 ? i.e.text.slice(0, 68) + '…' : i.e.text}</li>)}</ul> }
-            : { title: lead.c.label, time: fmtTime(lead.e.at), body: <>{lead.e.text}<span className="tip-who">{lead.e.actor}</span></> }, g.x, y)}>
-          <Icon size={13} weight={lead.c.key === 'alert' || lead.c.key === 'failure' ? 'fill' : 'bold'} />
-          {many && <span className="count">{g.items.length}</span>}
-        </button>
-      })}
-
-      {tip && <div className="tip" role="tooltip" style={{ left: Math.min(Math.max(tip.x, 150), w - 150), top: tip.y - 8 }}>
-        <div className="tip-head"><b>{tip.title}</b><span>{tip.time}</span></div>
-        <div className="tip-body">{tip.body}</div>
-      </div>}
     </div>
+  )
+}
+
+// ---------- 2. Log ----------
+type Phase = { name: string; start: number; end?: number; reason?: string; items: { e: TimelineEvent; c: Cat }[] }
+function phasesOf(inc: Incident): Phase[] {
+  const out: Phase[] = [{ name: 'Reported', start: inc.createdAt, items: [] }]
+  for (const e of inc.timeline) {
+    if (e.kind === 'state' && e.text.startsWith('State →')) {
+      const name = e.text.slice(8).split('.')[0], reason = e.text.replace(/^State → [^.]+\.\s*/, '') || undefined
+      const last = out[out.length - 1]
+      if (last.name === name) { last.reason = reason ?? last.reason; continue } // same phase re-announced: keep one heading
+      if (out.length === 1 && last.items.length === 0) { out[0] = { name, start: last.start, reason, items: [] }; continue }
+      last.end = e.at
+      out.push({ name, start: e.at, reason, items: [] })
+      continue
+    }
+    const c = categoryOf(e)
+    if (c) out[out.length - 1].items.push({ e, c })
+  }
+  return out
+}
+
+function PhaseLog({ inc }: { inc: Incident }) {
+  const S = useSim()
+  const phases = phasesOf(inc).reverse()
+  const [open, setOpen] = useState<Record<number, boolean>>({})
+  const closed = !!inc.closedAt
+  // Open by default: newest phases until at least 3 events are visible, so a phase that just began never opens onto nothing.
+  const openByDefault = new Set<number>()
+  for (let n = 0, i = 0; i < phases.length && (i === 0 || n < 3); i++) { openByDefault.add(phases[i].start); n += phases[i].items.length }
+  return (
+    <ol className="tlx-log" aria-label="Incident log, newest first">
+      {phases.map((p, i) => {
+        const current = i === 0 && !closed
+        const isOpen = open[p.start] ?? openByDefault.has(p.start)
+        const dur = (p.end ?? inc.closedAt ?? S.now) - p.start
+        return (
+          <li key={p.start} className={`tlx-phase ${current ? 'is-current' : ''}`}>
+            <button className="tlx-ph-head" aria-expanded={isOpen} onClick={() => setOpen(o => ({ ...o, [p.start]: !isOpen }))} disabled={!p.items.length && !p.reason}>
+              <span className="tlx-dot" aria-hidden />
+              <span className="tlx-ph-name">{p.name}</span>
+              <span className="tlx-ph-meta num">{fmtTime(p.start, false)}{p.name !== 'Closed' && ` · ${short(dur)}`}</span>
+              <span className="spacer" />
+              {!isOpen && p.items.length > 0 && <span className="tlx-ph-count">{p.items.length} event{p.items.length > 1 ? 's' : ''}</span>}
+              {(p.items.length > 0 || p.reason) && <CaretDown size={12} weight="bold" className="tlx-caret" aria-hidden />}
+            </button>
+            {isOpen && <>
+              {p.reason && <p className="tlx-reason">{p.reason}</p>}
+              {p.items.length > 0 && <ul className="tlx-evs">
+                {[...p.items].reverse().map(({ e, c }) => (
+                  <li key={e.id} className={`tlx-ev c-${c.key}`} tabIndex={0} aria-label={`${fmtTime(e.at)} ${c.label}: ${e.text} (${e.actor})`}>
+                    <span className="tlx-ev-ic" aria-hidden><c.icon size={14} weight={c.key === 'alert' || c.key === 'failure' || c.key === 'ai' ? 'fill' : 'bold'} /></span>
+                    <span className="tlx-ev-txt">{e.text}<span className="tlx-ev-who"> · {e.actor}</span></span>
+                    <span className="tlx-ev-when num">{fmtTime(e.at, false)}</span>
+                  </li>
+                ))}
+              </ul>}
+            </>}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
