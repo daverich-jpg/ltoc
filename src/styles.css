@@ -28,6 +28,7 @@
   --hover: rgba(0, 0, 0, 0.04);
   --glass: rgba(255, 255, 255, 0.94);
   --field-line: #dddddd;
+  --lift: 0 1px 2px rgba(15, 15, 15, 0.06);
   --scrim: rgba(15, 15, 15, 0.3);
   --note-bg: #fbf3db;          /* Notion's yellow block background */
   --note-ink: #402c1b;
@@ -126,6 +127,7 @@ p { margin: 0; }
   --hover: rgba(255, 255, 255, 0.06);
   --glass: rgba(32, 32, 32, 0.94);
   --field-line: #3a3a3a;
+  --lift: 0 1px 0 rgba(255, 255, 255, 0.04);
   --scrim: rgba(0, 0, 0, 0.55);
   --note-bg: #3b3523;
   --note-ink: #f1e6c4;
@@ -160,7 +162,7 @@ p { margin: 0; }
   --shadow-1: 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 12px 32px rgba(0, 0, 0, 0.5);
 }
-:root[data-theme='dark'] select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23a3a3a3'%3E%3Cpath d='M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z'/%3E%3C/svg%3E"); }
+:root[data-theme='dark'] select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23d4d4d4'%3E%3Cpath d='M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z'/%3E%3C/svg%3E"); }
 :root[data-theme='dark'] .cam { outline-color: rgba(255, 255, 255, 0.1); }
 
 /* theme toggle */
@@ -402,8 +404,8 @@ textarea:focus, input[type='text']:focus, select:focus { outline: none; box-shad
 textarea { padding: 8px 10px; resize: vertical; min-height: 72px; line-height: 1.5; }
 /* Native chevrons sit flush against the edge and can't be padded, so draw our own: Phosphor caret-down (bold), 12px, 10px inset. */
 select { -webkit-appearance: none; appearance: none; height: 30px; padding: 0 32px 0 10px; cursor: pointer; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23615d59'%3E%3Cpath d='M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 12px; }
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%2331302e'%3E%3Cpath d='M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 14px 14px; }
 select::-ms-expand { display: none; }
 
 .dialog-back { position: fixed; inset: 0; background: var(--scrim); z-index: 50; display: grid; place-items: start center; padding-top: 12vh; }
@@ -512,7 +514,11 @@ select::-ms-expand { display: none; }
 .seg button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* A select still showing its prompt reads like a placeholder, not a chosen value; the prompt is hidden from the option list. */
-select.is-placeholder { color: var(--text-4); }
+/* A select is a control, not a field: a little lift, a darker caret and a prompt in body ink, so it never reads as disabled. */
+select { box-shadow: inset 0 0 0 1px var(--field-line), var(--lift); transition-property: box-shadow, background-color; }
+@media (hover: hover) and (pointer: fine) { select:hover:not(:focus):not(:disabled) { background-color: var(--surface-2); box-shadow: inset 0 0 0 1px var(--road-casing), var(--lift); } }
+select:focus { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-bg); }
+select.is-placeholder { color: var(--text-2); }
 select option { color: var(--text); }
 
 /* ---------- notes: pill → card ---------- */
