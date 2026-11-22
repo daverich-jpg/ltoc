@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import * as E from '../sim/engine'
-import { isTerminal, tierOf, TIER_LABEL, nextAction } from '../sim/derive'
+import { assignmentOverdue, isTerminal, tierOf, TIER_LABEL, nextAction } from '../sim/derive'
 import { SEGMENTS, segById } from '../sim/geo'
 import { AGENCIES } from '../sim/seed'
 import type { AgencyId, Incident, Role, Tier } from '../sim/types'
@@ -182,9 +182,28 @@ export function Nav() {
   const U = useUI()
   const S = useSim()
   const cur = U.active ? undefined : U.module
+  // Attention, not inventory: only what needs the operator gets a count. Act now tints it; Watch stays neutral;
+  // ambient incidents and on-track units never badge, so a quiet shift keeps a quiet nav.
+  const att = useMemo(() => {
+    let act = 0, watch = 0, overdue = 0
+    for (const inc of Object.values(S.incidents)) {
+      const t = tierOf(inc, S).tier
+      if (t === 'act') act++; else if (t === 'watch') watch++
+      if (!isTerminal(inc)) overdue += inc.assignments.filter(a => !a.released && assignmentOverdue(a, S)).length
+    }
+    return { act, watch, overdue }
+  }, [S])
+  const badge: Partial<Record<Module, { n: number; tone: 'act' | 'watch'; label: string }>> = {
+    incidents: att.act + att.watch ? { n: att.act + att.watch, tone: att.act ? 'act' : 'watch', label: [att.act && `${att.act} act now`, att.watch && `${att.watch} to watch`].filter(Boolean).join(', ') } : undefined,
+    response: att.overdue ? { n: att.overdue, tone: 'act', label: `${att.overdue} unit${att.overdue > 1 ? 's' : ''} not acknowledged` } : undefined,
+  }
   return (
     <nav className="nav" aria-label="Modules">
-      {NAV.map(n => <button key={n.id} aria-current={cur === n.id ? 'page' : undefined} onClick={() => go(n.id)} title={`${n.label} (${n.key})`}><n.icon />{n.label}</button>)}
+      {NAV.map(n => { const b = badge[n.id]; return (
+        <button key={n.id} aria-current={cur === n.id ? 'page' : undefined} onClick={() => go(n.id)} title={`${n.label} (${n.key})${b ? ` · ${b.label}` : ''}`} aria-label={b ? `${n.label}, ${b.label}` : undefined}>
+          <n.icon />{n.label}
+          {b && <span key={`${b.tone}-${b.n}`} className={`nav-badge ${b.tone}`} aria-hidden>{b.n}</span>}
+        </button>) })}
       <div className="nav-label">Prototype</div>
       <button aria-current={cur === 'flows' ? 'page' : undefined} onClick={() => go('flows')} title="Flows & states (6)"><Icon.flows />Flows & states</button>
     </nav>

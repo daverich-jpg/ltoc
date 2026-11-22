@@ -193,6 +193,12 @@ p { margin: 0; }
 .nav button[aria-current='page'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line); }
 .nav button[aria-current='page']::before { content: ''; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
 .nav button kbd { margin-left: auto; }
+/* Attention count: right-aligned pill. Re-keyed on change, so a new count settles in with one small bump. */
+.nav-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 9999px; display: inline-grid; place-items: center; font: var(--type-status); font-variant-numeric: tabular-nums; animation: badge-in 220ms var(--ease-enter) 1; }
+.nav-badge.act { background: var(--act-bg); color: var(--act-ink); }
+.nav-badge.watch { background: var(--surface-3); color: var(--text-2); }
+@keyframes badge-in { from { transform: scale(0.8); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .nav-badge { animation: none; } }
 .nav .nav-foot { font: var(--type-caption); margin-top: auto; color: var(--text-3); padding: 8px 10px; }
 .nav-label { font: var(--type-status); letter-spacing: 0; color: var(--text-3); padding: 16px 10px 4px; }
 
