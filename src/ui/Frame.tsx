@@ -6,7 +6,7 @@ import { SEGMENTS, segById } from '../sim/geo'
 import { AGENCIES } from '../sim/seed'
 import type { AgencyId, Incident, Role, Tier } from '../sim/types'
 import { Age, Icon, Kbd, StateChip, TierGlyph, fmtAge, fmtTime , Spinner } from './bits'
-import { getUI, go, openIncident, setUI, useSim, useUI, type Module } from './store'
+import { LAB, getUI, go, openIncident, setUI, useSim, useUI, type Module } from './store'
 import { toggleTheme, useTheme, currentTheme } from './theme'
 import { Sun as PhSun, Moon as PhMoon } from './icons'
 
@@ -30,12 +30,12 @@ export function TopBar() {
       <div className="spacer" />
       <ThemeToggle />
       <SeatMenu />
-      <div style={{ position: 'relative' }}>
+      {LAB && <div style={{ position: 'relative' }}>
         <button className="btn sm" aria-expanded={U.scenarioOpen} onClick={() => setUI({ scenarioOpen: !U.scenarioOpen })}>
           {S.running ? <Icon.play /> : <Icon.pause />} Scenario <span className="num muted">{S.speed}×</span>
         </button>
         {U.scenarioOpen && <ScenarioControl />}
-      </div>
+      </div>}
     </header>
   )
 }
@@ -204,8 +204,10 @@ export function Nav() {
           <n.icon />{n.label}
           {b && <span key={`${b.tone}-${b.n}`} className={`nav-badge ${b.tone}`} aria-hidden>{b.n}</span>}
         </button>) })}
-      <div className="nav-label">Prototype</div>
-      <button aria-current={cur === 'flows' ? 'page' : undefined} onClick={() => go('flows')} title="Flows & states (6)"><Icon.flows />Flows & states</button>
+      {LAB && <>
+        <div className="nav-label">Prototype</div>
+        <button aria-current={cur === 'flows' ? 'page' : undefined} onClick={() => go('flows')} title="Flows & states (6)"><Icon.flows />Flows & states</button>
+      </>}
     </nav>
   )
 }
@@ -285,8 +287,8 @@ export function Palette() {
     for (const sg of SEGMENTS) out.push({ id: sg.id, label: sg.name, type: 'Road', run: () => { setUI({ module: 'map', active: undefined, inspectSeg: sg.id }) } })
     for (const a of Object.keys(AGENCIES) as AgencyId[]) out.push({ id: a, label: AGENCIES[a].name, type: 'Agency', run: () => setUI({ module: 'response', active: undefined }) })
     for (const n of NAV) out.push({ id: 'go-' + n.id, label: `Go to ${n.label}`, type: 'Action', run: () => go(n.id) })
-    out.push({ id: 'go-flows', label: 'Go to Flows & states', type: 'Action', run: () => go('flows') })
-    for (const sc of ['S1', 'S2', 'S3'] as const) out.push({ id: 'sc' + sc, label: `Start scenario ${sc}`, type: 'Action', run: () => E.startScenario(sc) })
+    if (LAB) out.push({ id: 'go-flows', label: 'Go to Flows & states', type: 'Action', run: () => go('flows') })
+    if (LAB) for (const sc of ['S1', 'S2', 'S3'] as const) out.push({ id: 'sc' + sc, label: `Start scenario ${sc}`, type: 'Action', run: () => E.startScenario(sc) })
     out.push({ id: 'theme', label: `Switch to ${currentTheme() === 'dark' ? 'light' : 'dark'} mode`, type: 'Action', run: toggleTheme })
     out.push({ id: 'role-s', label: 'Switch to supervisor seat', type: 'Action', run: () => E.setRole('supervisor') })
     out.push({ id: 'role-o', label: 'Switch to operator seat', type: 'Action', run: () => E.setRole('operator') })
@@ -348,7 +350,7 @@ export function useGlobalKeys() {
       const typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI(u => ({ palette: !u.palette })); return }
       if (typing || e.metaKey || e.ctrlKey || e.altKey || getUI().palette) return
-      const m = ({ '1': 'overview', '2': 'map', '3': 'incidents', '4': 'response', '5': 'analytics', '6': 'flows' } as Record<string, Module>)[e.key]
+      const m = ({ '1': 'overview', '2': 'map', '3': 'incidents', '4': 'response', '5': 'analytics', ...(LAB ? { '6': 'flows' } : {}) } as Record<string, Module>)[e.key]
       if (m) { go(m); return }
       if (e.key === 'j' || e.key === 'k') {
         const S = E.getState()

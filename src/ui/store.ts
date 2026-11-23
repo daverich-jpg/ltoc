@@ -7,6 +7,9 @@ export function useSim() {
 }
 
 // ---- UI-only state (not part of the operational record) ----
+/** Prototype tooling (scenario controls, Flows & states) for case-study capture only: hidden from the product unless the URL has ?lab */
+export const LAB = (() => { try { return new URLSearchParams(location.search).has('lab') } catch { return false } })()
+
 export type Module = 'overview' | 'map' | 'incidents' | 'response' | 'analytics' | 'flows'
 export type Basemap = 'map' | 'satellite' | 'schematic'
 export interface View { x: number; y: number; w: number }

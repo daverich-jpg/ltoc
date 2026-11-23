@@ -5,7 +5,7 @@ import { Announcer, Nav, Palette, Rail, TopBar, useGlobalKeys } from './ui/Frame
 import { Workspace } from './ui/Workspace'
 import { AnalyticsModule, IncidentsModule, LiveMapModule, Overview, ResponseModule } from './ui/Modules'
 import { FlowsModule } from './ui/Flows'
-import { useUI } from './ui/store'
+import { LAB, useUI } from './ui/store'
 
 export default function App() {
   const U = useUI()
@@ -29,7 +29,7 @@ export default function App() {
             {!ws && U.module === 'incidents' && <IncidentsModule />}
             {!ws && U.module === 'response' && <ResponseModule />}
             {!ws && U.module === 'analytics' && <AnalyticsModule />}
-            {!ws && U.module === 'flows' && <FlowsModule />}
+            {!ws && LAB && U.module === 'flows' && <FlowsModule />}
             <Workspace />
           </main>
         </div>
