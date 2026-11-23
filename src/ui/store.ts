@@ -24,6 +24,8 @@ export interface UIState {
   palette: boolean
   paletteQuery?: string
   scenarioOpen: boolean
+  /** shift handover dialog: compose (outgoing), or read a past briefing by id */
+  handover?: 'compose' | { read: string }
   expanded: Record<string, Record<string, boolean>>
   inspectSeg?: string
   cameraCache: Record<string, number> // camId -> sim time the frame was fetched

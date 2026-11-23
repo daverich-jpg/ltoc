@@ -17,7 +17,7 @@ export function TopBar() {
   const camsOk = S.cameras.filter(c => c.status === 'ok').length
   return (
     <header className="topbar">
-      <div className="brand">LTOC <small>Lagos Traffic Ops</small></div>
+      <div className="brand"><span className="brand-mark" aria-hidden><i /><i /><i /><i /></span>LTOC <small>Lagos Traffic Ops</small></div>
       <div className="tb-group">
         <span className="clock num" aria-label="Simulated time, West Africa Time">{fmtTime(S.now)}</span>
       </div>
@@ -107,12 +107,13 @@ function SeatMenu() {
   }, [open])
   const cur = SEATS.find(x => x.role === S.role && (x.role !== 'liaison' || x.agency === S.liaisonAgency)) ?? SEATS[0]
   const pick = (x: typeof SEATS[number]) => { if (x.agency) E.setLiaisonAgency(x.agency); else E.setRole(x.role); setOpen(false) }
-  const initials = cur.role === 'liaison' ? cur.agency!.slice(0, 2) : cur.name[0]
+  const curName = cur.role === 'operator' ? S.shift.operator : cur.name
+  const initials = cur.role === 'liaison' ? cur.agency!.slice(0, 2) : cur.role === 'operator' ? S.shift.operator.slice(-1) : cur.name[0]
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button className="seat-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className={`avatar r-${cur.role}`} aria-hidden>{initials}</span>
-        <span>{cur.name}</span>
+        <span>{curName}</span>
         <span className={`chev ${open ? 'open' : ''}`} style={{ transform: open ? 'rotate(-90deg)' : 'rotate(90deg)' }}><Icon.chev /></span>
       </button>
       <AnimatePresence>
@@ -129,6 +130,13 @@ function SeatMenu() {
               {on && <span style={{ color: 'var(--accent)' }}><Icon.check /></span>}
             </button>
           })}
+          {S.role === 'operator' && !E.pendingHandover(S) && <>
+            <div className="menu-sep" />
+            <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); setUI({ handover: 'compose' }) }}>
+              <span className="menu-ic" aria-hidden><Icon.chev /></span>
+              <span style={{ flex: 1 }}><span style={{ display: 'block', fontWeight: 500 }}>Hand over shift…</span><span className="small muted">{S.shift.operator} to {E.incomingOperator()}</span></span>
+            </button>
+          </>}
         </motion.div>}
       </AnimatePresence>
     </div>
@@ -289,6 +297,7 @@ export function Palette() {
     for (const n of NAV) out.push({ id: 'go-' + n.id, label: `Go to ${n.label}`, type: 'Action', run: () => go(n.id) })
     if (LAB) out.push({ id: 'go-flows', label: 'Go to Flows & states', type: 'Action', run: () => go('flows') })
     if (LAB) for (const sc of ['S1', 'S2', 'S3'] as const) out.push({ id: 'sc' + sc, label: `Start scenario ${sc}`, type: 'Action', run: () => E.startScenario(sc) })
+    if (E.getState().role === 'operator' && !E.pendingHandover()) out.push({ id: 'handover', label: 'Hand over shift', type: 'Action', run: () => setUI({ handover: 'compose' }) })
     out.push({ id: 'theme', label: `Switch to ${currentTheme() === 'dark' ? 'light' : 'dark'} mode`, type: 'Action', run: toggleTheme })
     out.push({ id: 'role-s', label: 'Switch to supervisor seat', type: 'Action', run: () => E.setRole('supervisor') })
     out.push({ id: 'role-o', label: 'Switch to operator seat', type: 'Action', run: () => E.setRole('operator') })

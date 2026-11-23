@@ -85,14 +85,44 @@ export interface Incident {
   diversion?: Diversion
   messages: Message[]
   disposition?: string
+  /** who removed the obstruction and where it went, as reported from the field (never inferred by the console) */
+  clearance?: Clearance
   createdAt: number
   stateAt: number
   closedAt?: number
   mergedInto?: string
   scenario?: ScenarioId | 'background'
-  pendingField?: { want: 'Clearing' | 'Road clear'; unitId: string; at: number }
+  pendingField?: { want: 'Clearing' | 'Road clear' | 'Cleared by'; unitId: string; at: number }
   cameraId?: string
   escalationLogged?: string
+}
+
+/** One open incident as the outgoing operator left it: frozen at handover so the incoming one can see what changed. */
+export interface HandoverItem { incId: string; title: string; state: IncidentState; tier: 'act' | 'watch' | 'ambient' | 'none'; next: string; notes: string[] }
+export interface Handover {
+  id: string
+  from: string
+  at: number
+  /** shift-wide context the system can't know: written by the outgoing operator */
+  notes: string
+  items: HandoverItem[]
+  /** set when the incoming operator confirms they've read it and takes the desk */
+  to?: string
+  acceptedAt?: number
+  cancelledAt?: number
+}
+
+export type ClearedBy = 'Owner' | 'LASTMA tow' | 'LASEMA recovery' | 'Private tow' | 'Police' | 'Nothing to remove'
+export interface Clearance {
+  by: ClearedBy
+  /** the recovery unit that did it, when it was one of ours */
+  unitId?: string
+  /** where the vehicle went: one of DISPOSITIONS */
+  dest: string
+  /** who reported it, how, and when */
+  reporter: string
+  channel: Channel
+  at: number
 }
 
 export interface Unit {

@@ -6,6 +6,7 @@ import { Workspace } from './ui/Workspace'
 import { AnalyticsModule, IncidentsModule, LiveMapModule, Overview, ResponseModule } from './ui/Modules'
 import { FlowsModule } from './ui/Flows'
 import { LAB, useUI } from './ui/store'
+import { HandoverLayer } from './ui/Handover'
 
 export default function App() {
   const U = useUI()
@@ -34,6 +35,7 @@ export default function App() {
           </main>
         </div>
         {U.palette && <Palette />}
+        <HandoverLayer />
         <Announcer />
       </LayoutGroup>
     </MotionConfig>

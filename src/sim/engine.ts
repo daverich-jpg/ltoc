@@ -2,7 +2,7 @@
 // Rule (PRD §13, IA §6): the UI never shows a state the system has not confirmed.
 // Every operator action is a *command*. It sits in `pending` until the (simulated) server
 // or a field unit confirms it. On failure the state stays at its last confirmed value.
-import type { AgencyId, Assignment, Camera, Channel, HistoryRecord, Incident, IncidentState, Message, Pending, Playbook, Role, ScenarioId, Severity, SourceReport, TimelineEvent, Unit, UnitState } from './types'
+import type { AgencyId, Assignment, Camera, Channel, Clearance, Handover, HandoverItem, HistoryRecord, Incident, IncidentState, Message, Pending, Playbook, Role, ScenarioId, Severity, SourceReport, TimelineEvent, Unit, UnitState } from './types'
 import { CAMERAS, PLAYBOOKS, genHistory, seedUnits } from './seed'
 import { nodeById, route, segById } from './geo'
 import { isOpen, isTerminal, lastConf, nearestNode, assignmentOverdue, escalation } from './derive'
@@ -27,7 +27,11 @@ export interface State {
   scenarios: ScenarioId[]
   autopilot: boolean
   thresholds: { ackSec: number; unclaimedSec: number; verifySec: number }
-  handoverNotes: string
+  /** who has the operator desk, and since when */
+  shift: { operator: string; since: number }
+  handovers: Handover[]
+  /** the outgoing operator's notes while they write them */
+  handoverDraft: string
   history: HistoryRecord[]
   announcements: { id: string; at: number; text: string; tone: 'info' | 'warn' | 'error' }[]
   nextId: number
@@ -54,12 +58,12 @@ function initial(): State {
   return {
     now: START, speed: 4, running: true, incidents: {}, units, cameras: CAMERAS.map(c => ({ ...c })), playbooks: PLAYBOOKS,
     pending: [], role: 'operator', liaisonAgency: 'LASEMA', seat: 'Operator A · Desk 2', degraded: { feed: false, link: false }, feedAt: START,
-    scenarios: [], autopilot: false, thresholds: { ackSec: 60, unclaimedSec: 60, verifySec: 300 }, handoverNotes: '', history: genHistory(START), announcements: [], nextId: 139,
+    scenarios: [], autopilot: false, thresholds: { ackSec: 60, unclaimedSec: 60, verifySec: 300 }, shift: { operator: 'Operator A', since: START - 42 * 60000 }, handovers: [], handoverDraft: '', history: genHistory(START), announcements: [], nextId: 139,
   }
 }
 
 // ---------- helpers ----------
-const actorName = () => S.role === 'supervisor' ? 'Supervisor (Shift B)' : S.role === 'liaison' ? `${S.liaisonAgency} liaison` : 'Operator A'
+const actorName = () => S.role === 'supervisor' ? 'Supervisor (Shift B)' : S.role === 'liaison' ? `${S.liaisonAgency} liaison` : S.shift.operator
 function log(inc: Incident, kind: TimelineEvent['kind'], text: string, actor = 'System', route: Channel = 'system') {
   inc.timeline.push({ id: id('ev'), at: S.now, actor, route, kind, text })
 }
@@ -203,7 +207,10 @@ export function dispatchUnit(incId: string, unitId: string) {
   const inc = S.incidents[incId], unit = S.units[unitId]
   if (!inc || !unit || unit.state !== 'Available') return
   command(`Dispatch ${unitId}`, incId, () => {
-    if (unit.state !== 'Available') return
+    // Re-read the unit when the command lands: two dispatches sent before the first lands
+    // (autopilot ticks, a double-click) must not both assign it.
+    const unit = S.units[unitId]
+    if (unit.state !== 'Available' || inc.assignments.some(x => x.unitId === unitId && !x.released)) return
     const a: Assignment = { id: id('as'), unitId, role: ROLE_FOR[unit.type], assignedAt: S.now, history: [{ state: 'Dispatched', channel: 'terminal', at: S.now }] }
     inc.assignments = [...inc.assignments, a]
     if (!inc.involved.includes(unit.agency) && unit.agency !== inc.leadAgency) inc.involved = [...inc.involved, unit.agency]
@@ -304,6 +311,57 @@ export function withdrawMessage(incId: string, mid: string) {
   command('Withdraw public message', incId, () => { setMsg(inc, mid, { status: 'withdrawn' }); log(inc, 'message', 'Public message withdrawn.', actorName(), 'system') })
 }
 
+// Who cleared the road is the field's answer, not the console's guess. The sim decides the truth from
+// who was actually there: an on-scene recovery unit tows it; otherwise the owner drove or towed it away,
+// a crash with no tow goes to the police, and a queue or a false report leaves nothing to remove.
+function clearanceTruth(inc: Incident): Omit<Clearance, 'reporter' | 'channel' | 'at'> {
+  if (inc.vehicle === 'Unknown' || /truck|queue/i.test(inc.vehicle)) return { by: 'Nothing to remove', dest: 'No vehicle to remove' }
+  const rec = inc.assignments.find(a => !a.released && S.units[a.unitId].type === 'recovery' && lastConf(a).state === 'On scene')
+  if (rec) {
+    const ag = S.units[rec.unitId].agency
+    return { by: ag === 'PRIVATE' ? 'Private tow' : ag === 'LASEMA' ? 'LASEMA recovery' : 'LASTMA tow', unitId: rec.unitId, dest: 'Vehicle taken to the LASTMA yard' }
+  }
+  if (inc.type === 'Crash' && inc.hazards.injuries) return { by: 'Police', dest: 'Vehicle taken to a police station' }
+  return { by: 'Owner', dest: 'Removed by owner' }
+}
+const clearanceLine = (c: Omit<Clearance, 'reporter' | 'channel' | 'at'>) =>
+  c.by === 'Nothing to remove' ? 'Nothing to remove.' : `Cleared by ${c.by === 'Owner' ? 'the owner' : c.by === 'Police' ? 'police' : c.by}${c.unitId ? ` (${c.unitId})` : ''}; ${c.dest[0].toLowerCase() + c.dest.slice(1)}.`
+
+/** Who to radio about this incident: an on-scene patrol first, then anyone on scene, then the verifying officer. */
+function fieldContact(inc: Incident): string | undefined {
+  const onScene = inc.assignments.filter(a => !a.released && lastConf(a).state === 'On scene')
+  return (onScene.find(a => S.units[a.unitId].type === 'patrol') ?? onScene[0])?.unitId
+    ?? inc.assignments.find(a => S.units[a.unitId].type === 'patrol')?.unitId
+    ?? inc.verifiedBy?.match(/\(([^)]+)\)/)?.[1]
+}
+
+function recordClearance(inc: Incident, contact: string) {
+  const truth = clearanceTruth(inc)
+  // a recovery unit on scene reports its own tow; otherwise the officer who confirmed the road says who moved it
+  const reporter = truth.unitId ?? contact
+  const channel: Channel = truth.unitId ? S.units[truth.unitId].ackChannel : 'radio'
+  inc.clearance = { ...truth, reporter, channel, at: S.now }
+  log(inc, 'unit', `${reporter}: ${clearanceLine(truth)}`, reporter, channel)
+}
+
+/** Ask the field who cleared the road, for incidents that reached Road clear without saying. */
+export function requestClearedBy(incId: string) {
+  const inc = S.incidents[incId]
+  const contact = fieldContact(inc)
+  if (!contact) return
+  command('Request cleared by', incId, () => {
+    inc.pendingField = { want: 'Cleared by', unitId: contact, at: S.now }
+    log(inc, 'system', `Asked ${contact} who cleared the road and where the vehicle went.`, actorName(), 'radio')
+    after(18, () => {
+      const cur = S.incidents[incId]
+      if (!cur || cur.pendingField?.want !== 'Cleared by') return
+      cur.pendingField = undefined
+      recordClearance(cur, contact)
+      announce(`${incId}: ${contact} reported who cleared the road`)
+    })
+  })
+}
+
 export function requestFieldStatus(incId: string, want: 'Clearing' | 'Road clear') {
   const inc = S.incidents[incId]
   const onScene = inc.assignments.filter(a => !a.released && lastConf(a).state === 'On scene')
@@ -318,7 +376,7 @@ export function requestFieldStatus(incId: string, want: 'Clearing' | 'Road clear
       if (!cur || cur.pendingField?.want !== want) return
       cur.pendingField = undefined
       if (want === 'Clearing') setState(cur, 'Clearing', `${unit.unitId} confirmed recovery under way (radio).`, unit.unitId, 'radio')
-      else { setState(cur, 'Road clear', `${unit.unitId} confirmed all lanes open (radio).`, unit.unitId, 'radio'); cur.lanesBlocked = 0 }
+      else { setState(cur, 'Road clear', `${unit.unitId} confirmed all lanes open (radio).`, unit.unitId, 'radio'); cur.lanesBlocked = 0; recordClearance(cur, unit.unitId) }
       announce(`${incId}: ${want} confirmed by ${unit.unitId}`)
     })
   })
@@ -330,7 +388,9 @@ export function closeIncident(incId: string, disposition: string, detail: string
   if (!disposition) return
   command('Close incident', incId, () => {
     inc.disposition = detail ? `${disposition}: ${detail}` : disposition
-    setState(inc, 'Closed', `Disposition: ${inc.disposition}.`, actorName(), 'console')
+    const c = inc.clearance
+    const differs = c && c.dest !== disposition
+    setState(inc, 'Closed', `Disposition: ${inc.disposition}.${c ? ` Cleared by ${c.by}${c.unitId ? ` (${c.unitId})` : ''}, reported by ${c.reporter}.` : ' Who cleared the road was not reported.'}${differs ? ` Changed from the field report (${c!.dest}).` : ''}`, actorName(), 'console')
     for (const a of inc.assignments.filter(x => !x.released)) {
       a.released = true
       const u = S.units[a.unitId]
@@ -352,12 +412,43 @@ export function addNote(incId: string, text: string) {
 }
 
 // ---------- session controls ----------
-export function setRole(r: Role) { S.role = r; S.seat = r === 'supervisor' ? 'Supervisor · Shift B' : r === 'liaison' ? `${S.liaisonAgency} liaison seat` : 'Operator A · Desk 2'; emit() }
+export function setRole(r: Role) { S.role = r; S.seat = r === 'supervisor' ? 'Supervisor · Shift B' : r === 'liaison' ? `${S.liaisonAgency} liaison seat` : `${S.shift.operator} · Desk 2`; emit() }
 export function setLiaisonAgency(a: AgencyId) { S.liaisonAgency = a; setRole('liaison') }
 export function setSpeed(x: number) { S.speed = x; emit() }
 export function setRunning(r: boolean) { S.running = r; emit() }
 export function setThreshold(key: keyof State['thresholds'], sec: number) { S.thresholds = { ...S.thresholds, [key]: sec }; emit() }
-export function setHandoverNotes(t: string) { S.handoverNotes = t; emit() }
+// ---------- shift handover ----------
+// The outgoing operator hands over a frozen briefing; the desk is theirs until the incoming one
+// confirms they've read it. Both moments are written into every incident the briefing covered.
+export const pendingHandover = (s: State = S) => s.handovers.find(h => !h.acceptedAt && !h.cancelledAt)
+const nextOperator = (name: string) => { const m = name.match(/^Operator ([A-Z])$/); return m ? `Operator ${String.fromCharCode(m[1].charCodeAt(0) === 90 ? 65 : m[1].charCodeAt(0) + 1)}` : 'Operator B' }
+export function setHandoverDraft(t: string) { S.handoverDraft = t; emit() }
+export function handOverShift(items: HandoverItem[]) {
+  if (pendingHandover()) return
+  const h: Handover = { id: id('ho'), from: S.shift.operator, at: S.now, notes: S.handoverDraft.trim(), items }
+  S.handovers = [...S.handovers, h]
+  S.handoverDraft = ''
+  for (const it of items) { const inc = S.incidents[it.incId]; if (inc) log(inc, 'system', `Included in the shift handover by ${h.from}. Next: ${it.next.toLowerCase()}.`, h.from, 'console') }
+  announce(`Shift handed over by ${h.from}. Waiting for ${nextOperator(h.from)} to take over.`)
+  emit()
+}
+export function takeOverShift() {
+  const h = pendingHandover(); if (!h) return
+  const to = nextOperator(h.from)
+  S.handovers = S.handovers.map(x => x.id === h.id ? { ...x, to, acceptedAt: S.now } : x)
+  S.shift = { operator: to, since: S.now }
+  if (S.role === 'operator') S.seat = `${to} · Desk 2`
+  for (const it of h.items) { const inc = S.incidents[it.incId]; if (inc && isOpen(inc)) log(inc, 'system', `${to} took over the shift from ${h.from}.`, to, 'console') }
+  announce(`${to} took over the shift from ${h.from}.`)
+  emit()
+}
+export function cancelHandover() {
+  const h = pendingHandover(); if (!h) return
+  S.handovers = S.handovers.map(x => x.id === h.id ? { ...x, cancelledAt: S.now } : x)
+  S.handoverDraft = h.notes
+  emit()
+}
+export const incomingOperator = () => nextOperator(S.shift.operator)
 export function setDegraded(k: 'feed' | 'link', v: boolean) {
   S.degraded = { ...S.degraded, [k]: v }
   if (k === 'link') S.linkLostAt = v ? S.now : undefined
@@ -517,7 +608,7 @@ function autopilotStep() {
     case 'Clearing': if (!inc.pendingField && since > 240) requestFieldStatus(inc.id, 'Road clear'); break
     case 'Road clear':
       if (inc.diversion?.status === 'active') liftDiversion(inc.id)
-      else { const m = inc.messages.find(x => x.status === 'published'); if (m) withdrawMessage(inc.id, m.id); else if (since > 40 && inc.assignments.every(a => lastConf(a).state === 'On scene')) closeIncident(inc.id, 'Vehicle taken to the LASTMA yard', 'trailer towed by PT-7') }
+      else { const m = inc.messages.find(x => x.status === 'published'); if (m) withdrawMessage(inc.id, m.id); else if (since > 40 && inc.assignments.every(a => lastConf(a).state === 'On scene')) closeIncident(inc.id, inc.clearance?.dest ?? 'Vehicle taken to the LASTMA yard', '') }
       break
   }
 }

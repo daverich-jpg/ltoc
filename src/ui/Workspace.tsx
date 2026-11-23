@@ -10,7 +10,7 @@ import { closeIncident, getUI, openIncident, setUI, useSim, useUI } from './stor
 import type { State } from '../sim/engine'
 import { draftMessage, readReports } from '../ai/client'
 import { TimelineTrack } from './Timeline'
-import { Broadcast, Clock, NotePencil, PencilSimple, ShieldCheck, Sparkle } from './icons'
+import { Broadcast, Clock, NotePencil, PencilSimple, ShieldCheck, Sparkle, Truck, User, WarningCircle } from './icons'
 import type { AIResult, MessageDraft, MessageFacts, ReportRead } from '../ai/types'
 
 type Sec = 'verify' | 'assess' | 'response' | 'clear' | 'close' | 'timeline'
@@ -24,7 +24,7 @@ export function leadFor(inc: Incident, S: State): Sec {
     case 'Responding': return 'response'
     case 'On scene': return needsResponse ? 'response' : 'clear'
     case 'Clearing': return 'clear'
-    case 'Road clear': return inc.diversion?.status === 'active' || inc.messages.some(m => m.status === 'published') ? 'clear' : 'close'
+    case 'Road clear': return inc.diversion?.status === 'active' || inc.messages.some(m => m.status === 'published') || !inc.clearance ? 'clear' : 'close'
     case 'Closed': return 'close'
     default: return 'timeline'
   }
@@ -34,7 +34,7 @@ function doneFor(id: Sec, inc: Incident): boolean {
     case 'verify': return inc.verif === 'Verified' || inc.verif === 'Disproved'
     case 'assess': return inc.severity != null
     case 'response': { const a = inc.assignments; return a.length > 0 && a.every(x => x.released || lastConf(x).state === 'On scene') }
-    case 'clear': return (inc.state === 'Road clear' || inc.state === 'Closed') && inc.diversion?.status !== 'active' && !inc.messages.some(m => m.status === 'published')
+    case 'clear': return inc.state === 'Closed' || (inc.state === 'Road clear' && inc.diversion?.status !== 'active' && !inc.messages.some(m => m.status === 'published') && !!inc.clearance)
     case 'close': return inc.state === 'Closed'
     default: return false
   }
@@ -315,7 +315,7 @@ function AssessSection({ inc, lead }: { inc: Incident; lead: boolean }) {
   return (
     <Section id="assess" inc={inc} title="Assess" summary={summary} lead={lead}>
       {!ro && <div className="sevpick" role="group" aria-label="Severity">
-        {(['Minor', 'Major', 'Critical'] as Severity[]).map(s => <Cmd key={s} inc={inc} prefix="Set severity" kind={inc.severity === s || (!inc.severity && s === sug.level) ? 'primary' : ''} onClick={() => E.setSeverity(inc.id, s, sug.level)}>{s}{s === sug.level && !inc.severity ? ' · suggested' : ''}</Cmd>)}
+        {(['Minor', 'Major', 'Critical'] as Severity[]).map((s, lv) => <Cmd key={s} inc={inc} prefix="Set severity" kind={inc.severity === s || (!inc.severity && s === sug.level) ? 'primary' : ''} onClick={() => E.setSeverity(inc.id, s, sug.level)}><span className="lvl" aria-hidden>{[0, 1, 2].map(i => <i key={i} className={i <= lv ? 'on' : ''} />)}</span>{s}{s === sug.level && !inc.severity ? ' · suggested' : ''}</Cmd>)}
       </div>}
       {why.length > 0 && <p className="small muted" style={{ marginTop: 6 }}>Suggested {sug.level} because: {why.join(', ')}.</p>}
       <dl className="kv" style={{ marginTop: 12 }}>
@@ -396,11 +396,14 @@ function ClearSection({ inc, lead }: { inc: Incident; lead: boolean }) {
   const msg = [...inc.messages].reverse().find(m => m.status !== 'withdrawn') ?? inc.messages.at(-1)
   const done = isTerminal(inc)
   const reopened = (inc.state === 'Road clear' || done) && (d?.status === 'lifted' || msg?.status === 'withdrawn')
-  const summary = [d && d.status !== 'lifted' ? `Diversion ${d.status}` : null, msg && msg.status !== 'withdrawn' ? `message ${msg.status}` : null].filter(Boolean).join(' · ') || (reopened ? 'Traffic reopened' : done ? 'Done' : 'Nothing set up')
+  const cl = inc.clearance
+  const who = cl ? (cl.by === 'Nothing to remove' ? 'Nothing to remove' : `Cleared by ${cl.by === 'Owner' ? 'the owner' : cl.by}${cl.unitId ? ` (${cl.unitId})` : ''}`) : inc.state === 'Road clear' ? 'Cleared by: not reported' : null
+  const summary = [who, d && d.status !== 'lifted' ? `Diversion ${d.status}` : null, msg && msg.status !== 'withdrawn' ? `message ${msg.status}` : null].filter(Boolean).join(' · ') || (reopened ? 'Traffic reopened' : done ? 'Done' : 'Nothing set up')
   return (
     <Section id="clear" inc={inc} title="Clear" summary={summary} lead={lead}>
       {!done && <NextStep inc={inc} />}
       {!done && <TrafficStatus inc={inc} />}
+      {(inc.state === 'Road clear' || inc.state === 'Closed') && <ClearedByRow inc={inc} />}
       {(msg || !done) && <MessageBlock inc={inc} />}
       <Pendings inc={inc} prefixes={['Request', 'Approve', 'Lift', 'Save message', 'Publish', 'Withdraw', 'Adapt']} />
       {S.role === 'liaison' && !done && <p className="small muted" style={{ marginTop: 8 }}>Read only in the liaison seat.</p>}
@@ -413,10 +416,12 @@ function heroFor(inc: Incident, S: State): Hero {
   const onScene = inc.assignments.filter(a => !a.released && lastConf(a).state === 'On scene')
   const asker = (onScene.find(a => S.units[a.unitId].type === 'patrol') ?? onScene[0])?.unitId
   const pf = inc.pendingField
-  if (pf) return { key: `wait-${pf.want}`, title: `Asked ${pf.unitId} ${pf.want === 'Clearing' ? 'if recovery has started' : 'if all lanes are open'}`,
+  if (pf) return { key: `wait-${pf.want}`, title: `Asked ${pf.unitId} ${pf.want === 'Clearing' ? 'if recovery has started' : pf.want === 'Cleared by' ? 'who cleared the road' : 'if all lanes are open'}`,
     sub: <span className="next-wait"><Spinner /> Waiting for a radio reply · <span className="num">{fmtAge(S.now - pf.at)}</span></span> }
   if (inc.state === 'Road clear') {
     const div = inc.diversion?.status === 'active', live = inc.messages.find(m => m.status === 'published')
+    if (!div && !live && !inc.clearance) return { key: 'who', title: 'All lanes open, but nobody said who cleared it', sub: 'Ask the scene who removed the vehicle and where it went before closing.',
+      cmd: { label: 'Ask who cleared it', prefix: 'Request cleared by', run: () => E.requestClearedBy(inc.id) } }
     if (!div && !live) return { key: 'reopened', title: 'All lanes open, confirmed', sub: 'Traffic is back to normal. Close the incident next.' }
     return { key: 'reopen', title: 'All lanes open, confirmed', sub: div && live ? 'Lift the diversion and take the public message down.' : div ? 'Lift the diversion.' : 'Take the public message down.',
       cmd: { label: 'Reopen traffic', prefix: div ? 'Lift diversion' : 'Withdraw', run: () => { if (div) E.liftDiversion(inc.id); if (live) E.withdrawMessage(inc.id, live.id) } } }
@@ -449,6 +454,28 @@ function NextStep({ inc }: { inc: Incident }) {
 }
 
 // Diversion + public message, grouped by who holds them now. Same-status items share one line.
+/** Who removed the obstruction and where it went: the field's report, with who said it and when. */
+function ClearedByRow({ inc }: { inc: Incident }) {
+  const c = inc.clearance
+  const asking = inc.pendingField?.want === 'Cleared by'
+  if (!c) return (
+    <ul className="tstat" aria-label="Who cleared the road">
+      <li className="is-missing"><WarningCircle size={16} weight="bold" className="tstat-ic act" aria-hidden />
+        <span className="tstat-txt"><span className="tstat-h">Cleared by: not reported</span>
+          <span className="tstat-d">{asking ? <>Asked {inc.pendingField!.unitId} by radio · waiting</> : 'Nobody has said who removed the vehicle or where it went'}</span></span>
+        {asking && <Spinner />}</li>
+    </ul>)
+  const Ic = c.by === 'Owner' || c.by === 'Police' ? User : Truck
+  const who = c.by === 'Nothing to remove' ? 'Nothing to remove' : `Cleared by ${c.by === 'Owner' ? 'the owner' : c.by}${c.unitId ? ` · ${c.unitId}` : ''}`
+  return (
+    <ul className="tstat" aria-label="Who cleared the road">
+      <li><Ic size={16} weight="bold" className="tstat-ic ok" aria-hidden />
+        <span className="tstat-txt"><span className="tstat-h">{who}</span>
+          <span className="tstat-d">{c.dest} · reported by {c.reporter} ({c.channel})</span></span>
+        <span className="tstat-age num">{fmtTime(c.at, false)}</span></li>
+    </ul>)
+}
+
 function TrafficStatus({ inc }: { inc: Incident }) {
   const S = useSim()
   const d = inc.diversion
@@ -547,8 +574,13 @@ function MessageComposer({ inc, onDone }: { inc: Incident; onDone: () => void })
 // ---------------- Close ----------------
 function CloseSection({ inc, lead }: { inc: Incident; lead: boolean }) {
   const S = useSim()
-  const [disp, setDisp] = useState('')
+  const c = inc.clearance
+  const [disp, setDisp] = useState(c?.dest ?? '')
   const [detail, setDetail] = useState('')
+  // pick up the field's report if it lands while the form is open, unless the operator already chose
+  useEffect(() => { if (c && !disp) setDisp(c.dest) }, [c?.at])
+  const differs = !!c && !!disp && disp !== c.dest
+  const needsWhy = differs || (!c && !!disp)
   const m = metricsOf(inc)
   const warn: string[] = []
   const notArrived = inc.assignments.filter(a => !a.released && lastConf(a).state !== 'On scene')
@@ -560,6 +592,7 @@ function CloseSection({ inc, lead }: { inc: Incident; lead: boolean }) {
     <Section id="close" inc={inc} title="Close" summary={summary} lead={lead}>
       {inc.state === 'Closed' ? <>
         <p><b>{inc.disposition}</b> <span className="muted small">· closed {fmtTime(inc.closedAt!, false)}</span></p>
+        <p className="small muted" style={{ marginTop: 2 }}>{c ? <>{c.by === 'Nothing to remove' ? 'Nothing to remove' : <>Cleared by {c.by === 'Owner' ? 'the owner' : c.by}{c.unitId ? ` (${c.unitId})` : ''}</>} · reported by {c.reporter}, {c.channel}, {fmtTime(c.at, false)}</> : <span style={{ color: 'var(--act-ink)' }}>Who cleared the road was not reported.</span>}</p>
         <div className="metrics">
           {([['Verify', m.verify], ['Acknowledge', m.assign], ['Arrive', m.arrive], ['Clear', m.clear]] as const).map(([k, v]) => <div key={k}><span className="muted small">{k}</span><b className="num">{fmtDur(v)}</b></div>)}
         </div>
@@ -568,10 +601,13 @@ function CloseSection({ inc, lead }: { inc: Incident; lead: boolean }) {
         : <>
           <div className="inline-form" style={{ marginTop: 0 }}>
             <select className={disp ? '' : 'is-placeholder'} value={disp} onChange={e => setDisp(e.target.value)} disabled={S.role === 'liaison'}><option value="" disabled hidden>Where did the vehicle go?</option>{E.DISPOSITIONS.map(d => <option key={d}>{d}</option>)}</select>
-            <input type="text" value={detail} onChange={e => setDetail(e.target.value)} placeholder="Detail (optional)" disabled={S.role === 'liaison'} />
+            <input type="text" value={detail} onChange={e => setDetail(e.target.value)} placeholder={differs ? 'Why it differs from the field report (required)' : !c ? 'Who told you? (required)' : 'Detail (optional)'} aria-required={needsWhy} disabled={S.role === 'liaison'} />
           </div>
+          <p className="small" style={{ marginTop: 6, color: c && !differs ? 'var(--text-3)' : 'var(--act-ink)' }}>
+            {c ? (differs ? <>Changed from the field report: {c.reporter} said “{c.dest}”.</> : <>From {c.reporter}, {c.channel}, {fmtTime(c.at, false)}.</>) : 'Not reported from the scene. Ask in the Clear step, or say who told you.'}
+          </p>
           {warn.length > 0 && <p className="small" style={{ marginTop: 6, color: 'var(--act-ink)' }}>Still open: {warn.join(', ')}.</p>}
-          <div className="actions"><Cmd inc={inc} prefix="Close incident" kind="primary" disabled={!disp || S.role === 'liaison'} onClick={() => E.closeIncident(inc.id, disp, detail.trim())}>Close incident</Cmd></div>
+          <div className="actions"><Cmd inc={inc} prefix="Close incident" kind="primary" disabled={!disp || (needsWhy && !detail.trim()) || S.role === 'liaison'} onClick={() => E.closeIncident(inc.id, disp, detail.trim())}>Close incident</Cmd></div>
         </>}
       <Pendings inc={inc} prefixes={['Close incident']} />
     </Section>

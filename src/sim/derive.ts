@@ -142,6 +142,7 @@ export function nextAction(inc: Incident, S: State): string {
     case 'Road clear': {
       if (inc.diversion?.status === 'active') return 'Lift the diversion'
       if (inc.messages.some(m => m.status === 'published')) return 'Withdraw the public message'
+      if (!inc.clearance) return 'Ask who cleared the road, then close'
       return 'Record disposition and close'
     }
     default: return ''

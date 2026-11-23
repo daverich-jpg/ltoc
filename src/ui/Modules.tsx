@@ -7,6 +7,7 @@ import type { AgencyId, Incident, Tier } from '../sim/types'
 import { Age, Assumed, Icon, Sim, StateChip, TierGlyph, fmtAge, fmtDur, fmtTime } from './bits'
 import { COND_LEGEND, MapCanvas } from './MapCanvas'
 import { ATTRIBUTION } from './Basemap'
+import { ShiftLine } from './Handover'
 import { Car, VideoCamera } from './icons'
 import { go, openIncident, setUI, useSim, useUI } from './store'
 
@@ -34,11 +35,11 @@ export function Overview() {
       <div className="strip" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }} role="list" aria-label="Citywide status">
         <div className="panel stat" role="listitem"><div className="k"><TierGlyph tier="act" /> Act now</div><div className="v" style={{ color: count('act') ? 'var(--act)' : undefined }}>{count('act')}</div>{count('act') > 3 && <div className="s stale">Over the alert budget of 3</div>}</div>
         <div className="panel stat" role="listitem"><div className="k"><TierGlyph tier="watch" /> Watch</div><div className="v">{count('watch')}</div></div>
-        <div className="panel stat" role="listitem"><div className="k">Units committed</div><div className="v">{busyUnits}<span className="muted" style={{ fontSize: 16 }}> of {Object.keys(S.units).length}</span></div></div>
+        <div className="panel stat" role="listitem"><div className="k"><span className="sq" style={{ color: 'var(--accent)' }} aria-hidden />Units committed</div><div className="v">{busyUnits}<span className="unit">of {Object.keys(S.units).length}</span></div></div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: 12, alignItems: 'stretch' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <ShiftLine />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
           <section className="panel" aria-label="Attention queue">
             <div className="panel-h"><TierGlyph tier="act" /><h2>Needs action</h2></div>
             <div className="panel-b" style={{ padding: 0 }}>
@@ -51,7 +52,7 @@ export function Overview() {
                   </tr>))}</tbody></table>}
             </div>
           </section>
-          <section className="panel" aria-label="Corridor status" style={{ flex: 1 }}>
+          <section className="panel" aria-label="Corridor status">
             <div className="panel-h" style={{ paddingLeft: 16 }}><h2>Corridors</h2></div>
             <table className="t"><tbody>{corridors.map(c => (
               <tr key={c.c}>
@@ -60,10 +61,6 @@ export function Overview() {
                 <td style={{ width: 90 }} className="small">{c.closed ? <span className="chip act">Closed</span> : c.incs.length ? <span className="chip outline">{c.incs.length} incident{c.incs.length > 1 ? 's' : ''}</span> : null}</td>
               </tr>))}</tbody></table>
           </section>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Handover />
-        </div>
       </div>
     </div>
   )
@@ -75,26 +72,6 @@ export function CondBadge({ cond, stale }: { cond: Cond; stale?: boolean }) {
     <svg width="22" height="8" aria-hidden><line x1="2" y1="4" x2="20" y2="4" stroke={stale ? 'var(--text-3)' : st.c} strokeWidth={Math.min(6, st.w)} strokeDasharray={stale ? '2 3' : st.dash} strokeLinecap="round" /></svg>
     <span className={stale ? 'muted' : ''}>{cond}{stale ? ' (stale)' : ''}</span>
   </span>
-}
-
-function Handover() {
-  const S = useSim()
-  const open = Object.values(S.incidents).filter(isOpen).sort((a, b) => ({ act: 0, watch: 1, ambient: 2, none: 3 }[tierOf(a, S).tier] - { act: 0, watch: 1, ambient: 2, none: 3 }[tierOf(b, S).tier]))
-  const closedThisShift = Object.values(S.incidents).filter(i => isTerminal(i)).length
-  return (
-    <section className="panel" aria-label="Shift handover" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div className="panel-h"><h2>Handover</h2><span className="muted small">{open.length} open</span></div>
-      <div className="panel-b" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <ol className="small" style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {open.map(i => <li key={i.id} style={{ display: 'grid', gridTemplateColumns: '16px 74px 1fr', gap: 6 }}>
-            <TierGlyph tier={tierOf(i, S).tier} /><button className="btn ghost sm num" style={{ height: 18, padding: '0 4px', justifyContent: 'flex-start' }} onClick={() => openIncident(i.id)}>{i.id}</button>
-            <span>{i.title}<br /><span className="dim">{nextAction(i, S)}</span></span>
-          </li>)}
-        </ol>
-        <textarea value={S.handoverNotes} onChange={e => E.setHandoverNotes(e.target.value)} placeholder="Notes for the next shift" aria-label="Notes for the next shift" style={{ marginTop: 12, flex: 1, resize: 'none' }} />
-      </div>
-    </section>
-  )
 }
 
 // ================= Live map =================
@@ -171,10 +148,11 @@ export function IncidentsModule() {
   return (
     <div className="page">
       <div className="page-head"><div><h1>Incidents</h1></div></div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-        <div className="seg">{(['open', 'resolved', 'all'] as const).map(s => <button key={s} aria-pressed={state === s} onClick={() => setState(s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}</div>
+      <div className="tabs" style={{ alignItems: 'center' }}>
+        {(['open', 'resolved', 'all'] as const).map(s => <button key={s} aria-pressed={state === s} onClick={() => setState(s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}
+        <span className="gap" />
         <div className="seg">{(['any', 'act', 'watch', 'ambient'] as const).map(s => <button key={s} aria-pressed={tier === s} onClick={() => setTier(s)}>{s === 'any' ? 'Any tier' : TIER_LABEL[s]}</button>)}</div>
-        <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Search" style={{ maxWidth: 320 }} />
+        <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Search incidents" style={{ maxWidth: 260 }} />
       </div>
       <div className="panel">
         <table className="t">
@@ -201,7 +179,7 @@ export function ResponseModule() {
   return (
     <div className="page">
       <div className="page-head"><div><h1>Response</h1></div></div>
-      <div className="seg" style={{ marginBottom: 12 }}>{(['units', 'recovery', 'playbooks', 'messages', 'seats'] as const).map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{({ units: 'Unit board', recovery: 'Recovery assets', playbooks: 'Playbooks', messages: 'Public messages', seats: 'Agency seats' })[t]}</button>)}</div>
+      <div className="tabs" role="group" aria-label="Response views">{(['units', 'recovery', 'playbooks', 'messages', 'seats'] as const).map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{({ units: 'Unit board', recovery: 'Recovery assets', playbooks: 'Playbooks', messages: 'Public messages', seats: 'Agency seats' })[t]}</button>)}</div>
       {(tab === 'units' || tab === 'recovery') && <div className="panel">
                 <table className="t">
           <thead><tr><th style={{ paddingLeft: 16 }}>Unit</th><th>{tab === 'recovery' ? 'Capacity' : 'Agency'}</th><th>State</th><th>Confirmed</th><th>Incident</th></tr></thead>
@@ -255,7 +233,7 @@ export function AnalyticsModule() {
       <div className="page-head"><div><h1>Analytics</h1><p>Last 14 days</p></div></div>
       <div className="strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {metrics.map(([label, k]) => { const s = stat(k); const max = s.v[s.v.length - 1] || 1; return (
-          <div key={k} className="panel stat"><div className="k">{label}</div><div className="v">{fmtDur(s.med)}</div><div className="s">median · slowest 10% {fmtDur(s.p90)}</div>
+          <div key={k} className="panel stat"><div className="k"><span className="sq" aria-hidden />{label}</div><div className="v">{fmtDur(s.med)}</div><div className="s">median · slowest 10% {fmtDur(s.p90)}</div>
             <svg width="100%" height="28" viewBox="0 0 200 28" preserveAspectRatio="none" aria-hidden style={{ marginTop: 6 }}>{s.v.map((x, i) => <line key={i} x1={x / max * 196 + 2} x2={x / max * 196 + 2} y1={4} y2={24} stroke="var(--text-3)" strokeOpacity="0.5" />)}<line x1={s.med / max * 196 + 2} x2={s.med / max * 196 + 2} y1={0} y2={28} stroke="var(--accent)" strokeWidth="2" /></svg>
           </div>) })}
       </div>
