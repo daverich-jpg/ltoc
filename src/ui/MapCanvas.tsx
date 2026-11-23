@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { MAP_H, MAP_W, NODES, SEGMENTS, WATER, nodeXY, segById, segPoint, upstreamOf } from '../sim/geo'
+import { MAP_H, MAP_W, NODES, SEGMENTS, WATER, nodeXY, segPath, segPoint, segPointDir, upstreamOf } from '../sim/geo'
+import { Basemap } from './Basemap'
 import { isOpen, readingFor, segmentStatus, tierOf, lastConf, type Cond } from '../sim/derive'
 import { getUI, openIncident, setUI, useSim, useUI } from './store'
 import { Ambulance, Car, Circle, Diamond, FireTruck, Lifebuoy, Siren, Triangle, Truck, VideoCamera, VideoCameraSlash } from './icons'
@@ -77,6 +78,7 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
   const v = hotspots ? (local ?? U.view) : U.view
   const vh = v.w * (size.h / Math.max(1, size.w))
   const zoomedIn = v.w < 600
+  const schematic = U.basemap === 'schematic'
 
   const related = useMemo(() => {
     if (!focus) return null
@@ -125,24 +127,27 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
   }, [S.units, zoomedIn])
 
   return (
-    <div className="mapwrap" ref={ref}>
-      <svg viewBox={`${v.x} ${v.y} ${v.w} ${vh}`} onWheel={onWheel} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onClick={() => { if (!drag.current?.moved) setUI({ inspectSeg: undefined }) }} role="img" aria-label="Schematic map of Lagos road network">
+    <div className="mapwrap" ref={ref} data-basemap={U.basemap}>
+      {!schematic && <Basemap mode={U.basemap as 'map' | 'satellite'} view={{ x: v.x, y: v.y, w: v.w, h: vh }} size={size} />}
+      <svg viewBox={`${v.x} ${v.y} ${v.w} ${vh}`} onWheel={onWheel} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onClick={() => { if (!drag.current?.moved) setUI({ inspectSeg: undefined }) }} role="img" aria-label={schematic ? "Schematic map of Lagos road network" : "Map of Lagos road network"}>
         <defs>
-          <marker id="arr" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1 7 4 1 7Z" fill="var(--diversion)" /></marker>
           <filter id="desat"><feColorMatrix type="saturate" values="0.15" /></filter>
         </defs>
-        <rect x={-500} y={-500} width={MAP_W + 1000} height={MAP_H + 1000} fill="var(--map-land)" />
-        {WATER.map((p, i) => <polygon key={i} points={p} fill="var(--water)" />)}
+        {schematic && <>
+          <rect x={-500} y={-500} width={MAP_W + 1000} height={MAP_H + 1000} fill="var(--map-land)" />
+          {WATER.map((p, i) => <polygon key={i} points={p} fill="var(--water)" />)}
+        </>}
 
-        {/* base roads */}
+        {/* base roads: the schematic draws its own; on a real basemap only the network outline, so it stays legible with traffic hidden */}
         <g>
           {SEGMENTS.map(sg => {
-            const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
+            const d = segPath(sg.id)
             const w = 2.5 + sg.lanes * 0.8
-            return <g key={sg.id} opacity={dimSeg(sg.id)} className="focus-dim" style={{ filter: related && !related.segs.has(sg.id) ? 'url(#desat)' : undefined }}>
-              {sg.bridge && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--bridge-casing)" strokeWidth={w + 3} strokeLinecap="butt" />}
-              {!sg.bridge && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--road-casing)" strokeWidth={w + 1.6} strokeLinecap="round" />}
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--road)" strokeWidth={w} strokeLinecap="round" />
+            if (!schematic) return <path key={sg.id} d={d} fill="none" stroke="var(--net-line)" strokeWidth={L.traffic ? 1 : 2.5} strokeLinecap="round" strokeLinejoin="round" opacity={dimSeg(sg.id) * (L.traffic ? 0.5 : 0.9)} />
+            return <g key={sg.id} opacity={dimSeg(sg.id)} className="focus-dim" style={{ filter: related && !related.segs.has(sg.id) ? 'url(#desat)' : undefined }} fill="none" strokeLinejoin="round">
+              {sg.bridge && <path d={d} stroke="var(--bridge-casing)" strokeWidth={w + 3} strokeLinecap="butt" />}
+              {!sg.bridge && <path d={d} stroke="var(--road-casing)" strokeWidth={w + 1.6} strokeLinecap="round" />}
+              <path d={d} stroke="var(--road)" strokeWidth={w} strokeLinecap="round" />
             </g>
           })}
         </g>
@@ -152,23 +157,20 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
           {SEGMENTS.map(sg => {
             const r = readingFor(sg.id, S)
             const st = COND_STYLE[r.cond]
-            const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
-            return <line key={sg.id} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stale ? 'var(--text-3)' : st.c} strokeWidth={stale ? 1.5 : st.w} strokeDasharray={stale ? '2 4' : st.dash} strokeLinecap="round" opacity={dimSeg(sg.id) * (stale ? 0.6 : 0.95)} className="focus-dim" />
+            return <path key={sg.id} d={segPath(sg.id)} fill="none" strokeLinejoin="round" stroke={stale ? 'var(--text-3)' : st.c} strokeWidth={stale ? 1.5 : st.w} strokeDasharray={stale ? '2 4' : st.dash} strokeLinecap="round" opacity={dimSeg(sg.id) * (stale ? 0.6 : 0.95)} className="focus-dim" />
           })}
         </g>}
 
         {hotspots && <g>{SEGMENTS.map(sg => {
           const n = hotspots[sg.id] ?? 0; if (!n) return null
-          const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
-          return <line key={sg.id} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--act)" strokeOpacity={0.25 + Math.min(0.7, n / 12)} strokeWidth={3 + n * 1.3} strokeLinecap="round" />
+          return <path key={sg.id} d={segPath(sg.id)} fill="none" strokeLinejoin="round" stroke="var(--act)" strokeOpacity={0.25 + Math.min(0.7, n / 12)} strokeWidth={3 + n * 1.3} strokeLinecap="round" />
         })}</g>}
 
         {/* closures */}
         {L.closures && SEGMENTS.filter(sg => segmentStatus(sg.id, S).closed).map(sg => {
-          const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
-          const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
+          const [mx, my] = segPoint(sg.id, 0.5)
           return <g key={sg.id} opacity={dimSeg(sg.id)}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--act)" strokeWidth={2} strokeDasharray="1 5" strokeLinecap="round" />
+            <path d={segPath(sg.id)} fill="none" strokeLinejoin="round" stroke="var(--act)" strokeWidth={2} strokeDasharray="1 5" strokeLinecap="round" />
             <g transform={`translate(${mx} ${my})`}><rect x={-14} y={-7} width={28} height={14} rx={3} fill="var(--act)" /><text x={0} y={3.5} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="var(--on-solid)" fontFamily="var(--mono)">CLOSED</text></g>
           </g>
         })}
@@ -177,11 +179,12 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
         {L.diversions && incidents.filter(i => i.diversion && i.diversion.status !== 'lifted').map(i => (
           <g key={i.id} opacity={related && focus?.id !== i.id ? 0.25 : 1}>
             {i.diversion!.segs.map(sid => {
-              const sg = segById[sid]; const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
+              const d = segPath(sid); const { p: [ax, ay], a } = segPointDir(sid, 0.5); const k = v.w / 1000
               const active = i.diversion!.status === 'active'
               return <g key={sid}>
-                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--map-land)" strokeWidth={6} strokeLinecap="round" opacity={0.7} />
-                <path d={`M${x1} ${y1} L${(x1 + x2) / 2} ${(y1 + y2) / 2} L${x2} ${y2}`} stroke="var(--diversion)" strokeWidth={active ? 2.5 : 2} strokeDasharray={active ? undefined : '5 4'} fill="none" markerMid="url(#arr)" strokeLinecap="round" />
+                <path d={d} stroke="var(--map-land)" strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.7} />
+                <path d={d} stroke="var(--diversion)" strokeWidth={active ? 2.5 : 2} strokeDasharray={active ? undefined : '5 4'} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M-4 -4 4 0 -4 4Z" fill="var(--diversion)" transform={`translate(${ax} ${ay}) rotate(${a * 180 / Math.PI}) scale(${Math.max(0.8, k * 1.4)})`} />
               </g>
             })}
           </g>
@@ -189,10 +192,9 @@ export function MapCanvas({ focusId, wsOpen, hotspots }: { focusId?: string; wsO
 
         {/* hit areas for the segment inspector */}
         {SEGMENTS.map(sg => {
-          const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
-          return <line key={sg.id} x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={14} style={{ cursor: 'pointer' }} onClick={click(() => setUI({ inspectSeg: sg.id }))}><title>{sg.name}</title></line>
+          return <path key={sg.id} d={segPath(sg.id)} fill="none" stroke="transparent" strokeWidth={14} style={{ cursor: 'pointer' }} onClick={click(() => setUI({ inspectSeg: sg.id }))}><title>{sg.name}</title></path>
         })}
-        {U.inspectSeg && (() => { const sg = segById[U.inspectSeg]; const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to); return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--focus)" strokeWidth={2} strokeDasharray="3 3" fill="none" pointerEvents="none" /> })()}
+        {U.inspectSeg && (() => { return <path d={segPath(U.inspectSeg)} strokeLinejoin="round" stroke="var(--focus)" strokeWidth={2} strokeDasharray="3 3" fill="none" pointerEvents="none" /> })()}
 
         {/* labels */}
         {L.labels && NODES.filter(n => n.label === 'major' || (zoomedIn && n.label === 'minor')).map(nd => {

@@ -1,10 +1,12 @@
 // Lagos road network for LTOC.
+import ROADS from './roads.json'
+
 // Data policy (PRD §14): road, bridge and interchange NAMES are Verified against public
-// sources as of GEO_AS_OF. GEOMETRY is Assumed: positions are hand-placed from public maps
-// and must be checked against OpenStreetMap asset by asset before any claim of accuracy.
+// sources as of GEO_AS_OF. GEOMETRY comes from OpenStreetMap via scripts/snap-roads.mjs
+// (positions below are the hand-placed seeds the script searches around).
 
 export const GEO_AS_OF = '18 Nov 2026'
-export const GEO_SOURCE = 'Public sources (see PRD §18); geometry hand-placed, to verify against OSM'
+export const GEO_SOURCE = 'Public sources (see PRD §18); geometry snapped to OpenStreetMap'
 
 export interface GeoNode {
   id: string
@@ -112,23 +114,61 @@ export const SEGMENTS: Segment[] = [
   s('lekki-epe2', 'Lekki–Epe Expressway (Lekki Phase 1 – Ajah)', 'Lekki–Epe Expressway', 'lekki1', 'ajah', 'Eastbound', 3, true),
 ]
 
-// Projection: equirectangular, cos(6.5°)≈0.994 so degrees are close to square.
+// Projection: Web Mercator, so the SVG overlay lines up exactly with the basemap tiles.
+// One SVG unit = one pixel at zoom Z0 (512 px tiles, MapLibre's world size).
 export const LON0 = 3.3
 export const LAT0 = 6.67
-export const K = 3400
-export const MAP_W = Math.round((3.58 - LON0) * K)
-export const MAP_H = Math.round((LAT0 - 6.41) * K)
-export const proj = (lat: number, lon: number): [number, number] => [(lon - LON0) * K, (LAT0 - lat) * K]
+export const Z0 = Math.log2(3400 * 360 / 512)
+const WORLD = 512 * 2 ** Z0
+const mx = (lon: number) => (lon + 180) / 360 * WORLD
+const my = (lat: number) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * WORLD }
+const X0 = mx(LON0), Y0 = my(LAT0)
+export const proj = (lat: number, lon: number): [number, number] => [mx(lon) - X0, my(lat) - Y0]
+/** inverse of proj: SVG units back to [lat, lon] */
+export const unproj = (x: number, y: number): [number, number] => {
+  const lon = (x + X0) / WORLD * 360 - 180
+  const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + Y0) / WORLD))) * 180 / Math.PI
+  return [lat, lon]
+}
+export const MAP_W = Math.round(proj(LAT0, 3.58)[0])
+export const MAP_H = Math.round(proj(6.41, LON0)[1])
+
+// Snapped geometry (scripts/snap-roads.mjs): junctions placed where the named roads meet in
+// OpenStreetMap, segments routed along the real roads. Falls back to the hand-placed values.
+for (const nd of NODES) { const ll = (ROADS.nodes as Record<string, number[]>)[nd.id]; if (ll) { nd.lat = ll[0]; nd.lon = ll[1] } }
+export const ROADS_SOURCE = ROADS.source
+export const ROADS_DATE = ROADS.generated
 
 export const nodeById: Record<string, GeoNode> = Object.fromEntries(NODES.map(x => [x.id, x]))
 export const segById: Record<string, Segment> = Object.fromEntries(SEGMENTS.map(x => [x.id, x]))
 export const nodeXY = (id: string) => { const g = nodeById[id]; return proj(g.lat, g.lon) }
 
-export function segPoint(segId: string, t: number): [number, number] {
+interface Line { pts: [number, number][]; cum: number[]; len: number; d: string }
+const lines: Record<string, Line> = {}
+function lineOf(segId: string): Line {
+  const hit = lines[segId]; if (hit) return hit
   const sg = segById[segId]
-  const [x1, y1] = nodeXY(sg.from), [x2, y2] = nodeXY(sg.to)
-  return [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t]
+  const raw = (ROADS.segments as Record<string, { pts: number[][] } | undefined>)[segId]?.pts
+  const pts = raw ? raw.map(([la, lo]) => proj(la, lo)) : [nodeXY(sg.from), nodeXY(sg.to)]
+  const cum = [0]
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]))
+  const d = 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L')
+  return (lines[segId] = { pts, cum, len: cum[cum.length - 1], d })
 }
+/** SVG path data for a segment along its real road geometry */
+export const segPath = (segId: string) => lineOf(segId).d
+
+/** point at fraction t of the segment's length, plus the direction of travel there (radians) */
+export function segPointDir(segId: string, t: number): { p: [number, number]; a: number } {
+  const { pts, cum, len } = lineOf(segId)
+  const target = Math.max(0, Math.min(1, t)) * len
+  let i = 1
+  while (i < pts.length - 1 && cum[i] < target) i++
+  const [x1, y1] = pts[i - 1], [x2, y2] = pts[i]
+  const k = (target - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1])
+  return { p: [x1 + (x2 - x1) * k, y1 + (y2 - y1) * k], a: Math.atan2(y2 - y1, x2 - x1) }
+}
+export const segPoint = (segId: string, t: number): [number, number] => segPointDir(segId, t).p
 
 const R = 6371
 export function haversine(a: string, b: string) {

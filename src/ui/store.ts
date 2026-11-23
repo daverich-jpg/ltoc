@@ -8,6 +8,7 @@ export function useSim() {
 
 // ---- UI-only state (not part of the operational record) ----
 export type Module = 'overview' | 'map' | 'incidents' | 'response' | 'analytics' | 'flows'
+export type Basemap = 'map' | 'satellite' | 'schematic'
 export interface View { x: number; y: number; w: number }
 export interface UIState {
   module: Module
@@ -15,6 +16,7 @@ export interface UIState {
   active?: string
   back?: Module
   view: View
+  basemap: Basemap
   layers: Record<'traffic' | 'incidents' | 'units' | 'cameras' | 'diversions' | 'closures' | 'labels', boolean>
   palette: boolean
   paletteQuery?: string
@@ -26,7 +28,7 @@ export interface UIState {
   pulse: Record<string, number>
 }
 let U: UIState = {
-  module: 'overview', tabs: [], view: { x: 0, y: 0, w: 952 },
+  module: 'overview', tabs: [], view: { x: 0, y: 0, w: 952 }, basemap: 'map',
   layers: { traffic: true, incidents: true, units: true, cameras: true, diversions: true, closures: true, labels: true },
   palette: false, scenarioOpen: false, expanded: {}, cameraCache: {}, lastInput: 'pointer', pulse: {},
 }

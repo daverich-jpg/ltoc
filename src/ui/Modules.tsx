@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import * as E from '../sim/engine'
 import { CORRIDOR_SEGS, isOpen, isTerminal, lastConf, metricsOf, nextAction, readingFor, segmentStatus, tierOf, TIER_LABEL, assignmentOverdue, type Cond } from '../sim/derive'
-import { CORRIDORS, GEO_AS_OF, GEO_SOURCE, nodeById, segById } from '../sim/geo'
+import { CORRIDORS, GEO_AS_OF, GEO_SOURCE, nodeById, segById, ROADS_DATE } from '../sim/geo'
 import { AGENCIES } from '../sim/seed'
 import type { AgencyId, Incident, Tier } from '../sim/types'
 import { Age, Assumed, Icon, Sim, StateChip, TierGlyph, fmtAge, fmtDur, fmtTime } from './bits'
 import { COND_LEGEND, MapCanvas } from './MapCanvas'
+import { ATTRIBUTION } from './Basemap'
 import { Car, VideoCamera } from './icons'
 import { go, openIncident, setUI, useSim, useUI } from './store'
 
@@ -111,25 +112,28 @@ export function LiveMapModule({ focusId, wsOpen }: { focusId?: string; wsOpen?: 
         <div className="layers">
           <button className="btn ghost sm" style={{ justifyContent: 'space-between' }} onClick={() => setLayersOpen(!layersOpen)} aria-expanded={layersOpen}>Layers <span className={`chev ${layersOpen ? 'open' : ''}`}><Icon.chev /></span></button>
           {layersOpen && <>
+            <div className="seg" role="group" aria-label="Basemap">
+              {(['map', 'satellite', 'schematic'] as const).map(b => <button key={b} aria-pressed={U.basemap === b} onClick={() => setUI({ basemap: b })}>{b[0].toUpperCase() + b.slice(1)}</button>)}
+            </div>
             {(Object.keys(U.layers) as (keyof typeof U.layers)[]).map(k => <label key={k}><input type="checkbox" checked={U.layers[k]} onChange={e => setUI(u => ({ layers: { ...u.layers, [k]: e.target.checked } }))} />{k[0].toUpperCase() + k.slice(1)}</label>)}
             <div className="legend">
               {(Object.keys(COND_LEGEND) as Cond[]).map(c => <Fragment key={c}><svg width="26" height="8"><line x1="2" y1="4" x2="24" y2="4" stroke={COND_LEGEND[c].c} strokeWidth={COND_LEGEND[c].w} strokeDasharray={COND_LEGEND[c].dash} strokeLinecap="round" /></svg><span>{c}</span></Fragment>)}
               <span className="legend-glyph"><TierGlyph tier="act" size={13} /></span><span>Act now</span>
-              <span className="legend-glyph"><TierGlyph tier="watch" size={13} /></span><span>Watch</span>
-              <span className="legend-glyph"><span className="legend-ring"><TierGlyph tier="watch" size={11} /></span></span><span>Dashed ring: unverified</span>
-              <span className="legend-glyph"><span className="legend-unit"><Car size={10} /></span></span><span>Unit, by type</span>
-              <span className="legend-glyph"><span className="legend-unit"><VideoCamera size={10} /></span></span><span>Camera</span>
-              <svg width="26" height="8"><line x1="2" y1="4" x2="24" y2="4" stroke="var(--diversion)" strokeWidth="2" strokeDasharray="5 4" /></svg><span>Diversion proposed</span>
             </div>
           </>}
         </div>
       </div>
       {U.inspectSeg && !wsOpen && <SegmentInspector segId={U.inspectSeg} />}
       <div className="map-foot" style={wsOpen ? { right: 'calc(min(780px, 62%) + 14px)' } : undefined}>
-        <span title={`Road names verified ${GEO_AS_OF}. Geometry hand-placed, to check against OSM. Traffic is simulated.`}>Approximate map · units at last confirmed position</span>
+        <span title={`Road names verified ${GEO_AS_OF}. Road geometry from OpenStreetMap (${ROADS_DATE}). Traffic is simulated.`}>{U.basemap === 'schematic' ? 'Schematic map' : ATTRIBUTION[U.basemap]} · units at last confirmed position</span>
       </div>
     </>
   )
+}
+
+function MapCredit() {
+  const U = useUI()
+  return U.basemap === 'schematic' ? null : <span>{ATTRIBUTION[U.basemap]}</span>
 }
 
 function SegmentInspector({ segId }: { segId: string }) {
@@ -256,7 +260,7 @@ export function AnalyticsModule() {
           </div>) })}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 12 }}>
-        <div className="panel" style={{ position: 'relative', height: 520, overflow: 'hidden' }}><MapCanvas hotspots={hot} /><div className="map-foot"><span>Crashes per road segment</span></div></div>
+        <div className="panel" style={{ position: 'relative', height: 520, overflow: 'hidden' }}><MapCanvas hotspots={hot} /><div className="map-foot"><span>Crashes per road segment</span><MapCredit /></div></div>
         <div className="panel"><div className="panel-h"><h2>Top segments</h2></div><table className="t"><tbody>{top.map(([id, n]) => <tr key={id}><td>{segById[id].name}<div className="bar" style={{ marginTop: 4 }}><i style={{ width: `${n / top[0][1] * 100}%`, background: 'var(--act)' }} /></div></td><td className="num" style={{ width: 40 }}>{n}</td></tr>)}</tbody></table>
 </div>
       </div>
