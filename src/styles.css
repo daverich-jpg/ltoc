@@ -587,32 +587,16 @@ textarea.composer-input:focus { outline: none; }
 /* ---------- timeline (moodboard: Gantt lanes + grouped log) ---------- */
 .tlx { display: flex; flex-direction: column; gap: var(--space-3); }
 /* units: label column + time track, gridlines and Now line repeat per row so rows stay independent */
-.tlx-lanes { display: grid; grid-template-columns: 152px 1fr; column-gap: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-soft); }
-.tlx-row { display: contents; }
-.tlx-lane-label { display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 40px; }
-.tlx-axis-label { font: var(--type-status); color: var(--text-3); height: 20px; }
-.tlx-axis { position: relative; height: 20px; font: var(--type-meta); font-variant-numeric: tabular-nums; color: var(--text-3); }
-.tlx-axis span { position: absolute; top: 2px; white-space: nowrap; }
-.tlx-axis .mid { transform: translateX(-50%); }
-.tlx-axis .end { transform: translateX(-100%); }
-.tlx-axis .now { color: var(--accent-ink); font-weight: 500; }
-.tlx-unit-ic { flex: none; color: var(--text-3); }
-.tlx-unit { display: flex; flex-direction: column; min-width: 0; }
-.tlx-callsign { font: var(--type-status); color: var(--text); }
-.tlx-status { font: var(--type-meta); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tlx-status.late { color: var(--act-ink); }
-.tlx-track { position: relative; height: 40px; }
-.tlx-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-soft); }
-.tlx-now { position: absolute; top: 0; bottom: 0; width: 1.5px; margin-left: -1.5px; background: var(--accent); opacity: 0.6; }
-/* bar: hatched while waiting for acknowledgement, solid once moving, green once on scene */
-.tlx-bar { --fill: color-mix(in oklab, var(--text-3) 26%, transparent); position: absolute; top: 12px; height: 16px; min-width: 6px; border-radius: 9999px; box-sizing: border-box;
-  background: linear-gradient(var(--fill), var(--fill)) right / calc(100% - var(--ack)) 100% no-repeat, repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 6px);
-  box-shadow: inset 0 0 0 1px var(--line); }
-.tlx-bar.arrived { --fill: color-mix(in oklab, var(--ok) 32%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ok) 35%, transparent); }
-.tlx-bar.late { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--act) 55%, transparent); }
-.tlx-pin { position: absolute; top: 16px; width: 8px; height: 8px; margin-left: -4px; border-radius: 9999px; background: var(--ok); box-shadow: 0 0 0 2px var(--surface); }
+.tlx-units { padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-soft); }
+.tlx-sec-label { font: var(--type-status); color: var(--text-3); margin-bottom: var(--space-1); }
+.tlx-sec-label .num { margin-left: 4px; }
+.tlx-unit-list { list-style: none; margin: 0; padding: 0; }
+.tlx-unit-ic { flex: none; width: 15px; display: grid; place-items: center; color: var(--text-2); }
+.tlx-unitblk.is-released .tlx-unit-ic, .tlx-unitblk.is-released .tlx-ph-name { color: var(--text-3); }
+.tlx-ph-meta.late { color: var(--act-ink); }
+.tlx-unitblk .tlx-ev { color: var(--text-2); }
+.tlx-ev-ch { color: var(--text-3); }
 
-/* log: phases newest first on one connector; finished phases fold to a count */
 .tlx-log { list-style: none; margin: 0; padding: 0; position: relative; }
 .tlx-log::before { content: ''; position: absolute; left: 7px; top: 14px; bottom: 14px; width: 1px; background: var(--line); }
 .tlx-phase { position: relative; }

@@ -1,6 +1,5 @@
 // Incident timeline, after the moodboard:
-// 1. Units: a small Gantt. Callsign and status on the left, one bar per unit on a shared time axis
-//    (hatched until acknowledged, green once on scene), with a Now line.
+// 1. Units: one collapsible row per unit, built like the log's phase rows.
 // 2. Log: events grouped under the phase they happened in, newest phase first, on one connector line.
 //    Finished phases fold to a count; the current phase stays open. Rows stay quiet until hovered.
 import { useState } from 'react'
@@ -37,52 +36,48 @@ export function TimelineTrack({ inc }: { inc: Incident }) {
 }
 
 // ---------- 1. Units ----------
+// Same grammar as the log below: one row per unit (callsign, dispatch time, status), opening to the
+// unit's confirmed states with channel and time. Collapsed by default; a late unit opens itself.
 function UnitLanes({ inc }: { inc: Incident }) {
   const S = useSim()
-  const live = !inc.closedAt
-  const t0 = Math.min(...inc.assignments.map(a => a.history[0].at))
-  const t1 = Math.max(inc.closedAt ?? S.now, t0 + 120000)
-  const pct = (t: number) => ((t - t0) / (t1 - t0)) * 100
-  const span = t1 - t0
-  const step = [60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3].find(s => span / s <= 4) ?? 7200e3
-  const ticks: number[] = []
-  for (let t = Math.ceil(t0 / step) * step; t < t1; t += step) if (pct(t) > 20 && pct(t) < 82) ticks.push(t)
-  const grid = <>{ticks.map(t => <i key={t} className="tlx-grid" style={{ left: `${pct(t)}%` }} />)}{live && <i className="tlx-now" style={{ left: '100%' }} />}</>
-
+  const [open, setOpen] = useState<Record<string, boolean>>({})
   return (
-    <div className="tlx-lanes" role="table" aria-label="Units over time">
-      <div className="tlx-lane-label tlx-axis-label" role="columnheader">Units</div>
-      <div className="tlx-axis" role="columnheader" aria-hidden>
-        <span style={{ left: 0 }}>{fmtTime(t0, false)}</span>
-        {ticks.map(t => <span key={t} className="mid" style={{ left: `${pct(t)}%` }}>{fmtTime(t, false)}</span>)}
-        <span className={`end ${live ? 'now' : ''}`} style={{ left: '100%' }}>{live ? 'Now' : fmtTime(t1, false)}</span>
-      </div>
-      {inc.assignments.map(a => {
-        const u = S.units[a.unitId]
-        const at = (st: string) => a.history.find(h => h.state === st)?.at
-        const start = a.history[0].at, ack = at('Acknowledged'), onScene = at('On scene')
-        const end = onScene ?? t1
-        const overdue = !a.released && assignmentOverdue(a, S)
-        const status = onScene ? `On scene in ${short(onScene - start)}` : a.released ? 'Released' : overdue ? 'No acknowledgement' : ack ? 'En route' : 'Dispatched'
-        const Icon = UNIT_ICON[u.type]
-        const w = Math.max(pct(end) - pct(start), 0.5)
-        const ackPct = ack ? ((ack - start) / Math.max(end - start, 1)) * 100 : 100
-        return (
-          <div key={a.id} className="tlx-row" role="row">
-            <div className="tlx-lane-label" role="cell">
-              <Icon size={16} weight="bold" className="tlx-unit-ic" aria-hidden />
-              <span className="tlx-unit"><span className="tlx-callsign">{u.callsign}</span><span className={`tlx-status ${overdue ? 'late' : ''}`}>{status}</span></span>
-            </div>
-            <div className="tlx-track" role="cell" aria-label={`${u.callsign}: ${a.history.map(h => `${h.state} ${fmtTime(h.at, false)}`).join(', ')}`}>
-              {grid}
-              <span className={`tlx-bar ${onScene ? 'arrived' : ''} ${overdue ? 'late' : ''}`} style={{ left: `${pct(start)}%`, width: `${w}%`, ['--ack' as string]: `${ackPct}%` }}
-                title={a.history.map(h => `${fmtTime(h.at)}  ${h.state} · ${h.channel}`).join('\n')} />
-              {onScene && <span className="tlx-pin" style={{ left: `${pct(onScene)}%` }} aria-hidden />}
-            </div>
-          </div>
-        )
-      })}
-    </div>
+    <section className="tlx-units" aria-label="Units">
+      <div className="tlx-sec-label">Units <span className="num">{inc.assignments.length}</span></div>
+      <ul className="tlx-unit-list">
+        {inc.assignments.map(a => {
+          const u = S.units[a.unitId]
+          const at = (st: string) => a.history.find(h => h.state === st)?.at
+          const start = a.history[0].at, ack = at('Acknowledged'), onScene = at('On scene')
+          const overdue = !a.released && assignmentOverdue(a, S)
+          const status = onScene ? `on scene in ${short(onScene - start)}` : a.released ? 'released' : overdue ? 'no acknowledgement' : ack ? 'en route' : 'dispatched'
+          const Icon = UNIT_ICON[u.type]
+          const isOpen = open[a.id] ?? overdue
+          const steps = [...a.history].reverse()
+          return (
+            <li key={a.id} className={`tlx-unitblk ${a.released ? 'is-released' : ''}`}>
+              <button className="tlx-ph-head" aria-expanded={isOpen} onClick={() => setOpen(o => ({ ...o, [a.id]: !isOpen }))}>
+                <span className="tlx-unit-ic" aria-hidden><Icon size={14} weight="bold" /></span>
+                <span className="tlx-ph-name">{u.callsign}</span>
+                <span className={`tlx-ph-meta num ${overdue ? 'late' : ''}`}>{fmtTime(start, false)} · {status}</span>
+                <span className="spacer" />
+                {!isOpen && <span className="tlx-ph-count">{steps.length} update{steps.length > 1 ? 's' : ''}</span>}
+                <CaretDown size={12} weight="bold" className="tlx-caret" aria-hidden />
+              </button>
+              {isOpen && <ul className="tlx-evs">
+                {steps.map((h, i) => (
+                  <li key={i} className="tlx-ev" tabIndex={0} aria-label={`${fmtTime(h.at)} ${u.callsign} ${h.state}, by ${h.channel}`}>
+                    <span className="tlx-ev-ic" aria-hidden><Broadcast size={14} weight="bold" /></span>
+                    <span className="tlx-ev-txt">{h.state}<span className="tlx-ev-ch"> · {h.channel}</span></span>
+                    <span className="tlx-ev-when num">{fmtTime(h.at, false)}</span>
+                  </li>
+                ))}
+              </ul>}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 
