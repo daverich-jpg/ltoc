@@ -284,28 +284,23 @@ function CameraView({ inc, onViewed }: { inc: Incident; onViewed: () => void }) 
 }
 
 function CamFrame({ inc, at }: { inc: Incident; at: number }) {
-  const lanes = segById[inc.segId].lanes
+  const S = useSim()
+  const seg = segById[inc.segId]
   const truth = inc.vehicle !== 'Unknown' && at >= inc.createdAt
   const seed = Math.floor(at / 30000)
-  const cars = Array.from({ length: 14 }, (_, i) => ({ lane: (i * 7 + seed) % lanes, x: ((i * 97 + seed * 31) % 100) }))
-  const blocked = new Set(truth ? Array.from({ length: inc.lanesBlocked ?? 2 }, (_, i) => lanes - 1 - i) : [])
-  return (
-    <svg viewBox="0 0 400 175" preserveAspectRatio="none">
-      <rect width="400" height="175" fill="oklch(0.2 0.006 250)" />
-      <path d="M150 0 L250 0 L400 175 L0 175 Z" fill="oklch(0.27 0.005 250)" />
-      {Array.from({ length: lanes - 1 }, (_, i) => { const f = (i + 1) / lanes; return <line key={i} x1={150 + 100 * f} y1={0} x2={400 * f} y2={175} stroke="oklch(0.6 0 0 / 0.5)" strokeDasharray="8 10" /> })}
-      {cars.filter(c => !(truth && blocked.has(c.lane) && c.x < 60)).map((c, i) => {
-        const y = 20 + c.x * 1.4; const sc = 0.3 + (y / 175) * 0.9
-        const cx = 150 + (c.lane + 0.5) / lanes * 100 + ((c.lane + 0.5) / lanes * 400 - (150 + (c.lane + 0.5) / lanes * 100)) * (y / 175)
-        return <rect key={i} x={cx - 7 * sc} y={y} width={14 * sc} height={9 * sc} rx={2} fill={`oklch(${0.45 + (i % 3) * 0.12} 0.02 ${i * 40})`} />
-      })}
-      {truth && (/tanker/i.test(inc.vehicle)
-        ? <g transform="translate(290 95) rotate(-6)"><rect x={-40} y={-12} width={80} height={24} rx={11} fill="oklch(0.78 0.02 90)" /><rect x={40} y={-11} width={20} height={22} rx={3} fill="oklch(0.55 0.1 30)" /></g>
-        : /trailer/i.test(inc.vehicle)
-          ? <g transform="translate(270 90) rotate(-28)"><rect x={-55} y={-12} width={95} height={24} rx={2} fill="oklch(0.62 0.03 240)" /><rect x={42} y={-11} width={22} height={22} rx={3} fill="oklch(0.55 0.12 260)" /></g>
-          : <g transform="translate(250 100) rotate(12)"><rect x={-35} y={-11} width={60} height={22} rx={4} fill="oklch(0.7 0.14 85)" /><rect x={30} y={-6} width={18} height={12} rx={3} fill="oklch(0.5 0.02 250)" transform="rotate(35 30 0)" /></g>)}
-    </svg>
-  )
+  // The frame shows the road as it is. Lanes blocked come from the scene, not from the operator's record.
+  const scene = truth ? { vehicle: inc.vehicle, lanesBlocked: inc.lanesBlocked || (/trailer/i.test(inc.vehicle) ? 2 : 1) } : null
+  const patrol = !!scene && inc.assignments.some(a => !a.released && a.history.some(h => h.state === 'On scene' && h.at <= at) && S.units[a.unitId]?.type === 'patrol')
+  const key = `${inc.id}|${seed}|${scene ? scene.vehicle + scene.lanesBlocked : 'clear'}|${patrol}`
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    setSrc(null)
+    import('./camScene').then(m => m.renderCamFrame({ key, seed: seed + inc.id.length * 131, lanes: seg.lanes, bridge: !!seg.bridge, scene, patrol })).then(u => { if (live) setSrc(u) }).catch(() => {})
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return src ? <img className="cam-img" src={src} alt={`Camera frame: ${seg.name}${scene ? `, ${scene.vehicle.toLowerCase()} in the road` : ', traffic moving'}`} /> : <div className="cam-img skel" aria-hidden />
 }
 
 // ---------------- Assess ----------------

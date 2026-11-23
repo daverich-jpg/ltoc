@@ -377,6 +377,9 @@ table.t tr.click { cursor: pointer; }
 
 .cam { position: relative; border-radius: var(--r-md); overflow: hidden; background: #1f1f1e; aspect-ratio: 16 / 7; outline: 1px solid rgba(0, 0, 0, 0.1); outline-offset: -1px; }
 .cam svg { width: 100%; height: 100%; display: block; }
+.cam-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(0.88) contrast(1.04); }
+.cam::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.28) 100%); }
+.cam .ov, .cam .cam-refresh { z-index: 1; }
 .cam .ov { font: var(--type-status); position: absolute; left: 10px; top: 8px; right: 10px; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 2px #000; }
 .cam .ph { font: var(--type-status); position: absolute; bottom: 8px; left: 10px; letter-spacing: 0.4px; color: #7fd6d2; }
 .skel { background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; border-radius: var(--r-md); }
