@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { StyleSpecification } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// MapLibre 6 ships its worker as a separate file and looks for it next to its own script, which a bundle
+// doesn't have. Let Vite emit the worker and tell MapLibre where it is, in dev and in the Pages build.
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+maplibregl.setWorkerUrl(workerUrl)
 import { NODES, Z0, unproj } from '../sim/geo'
-import type { Basemap as Mode } from './store'
+import { LAB, type Basemap as Mode } from './store'
 import { useTheme, type Theme } from './theme'
 
 // Real basemap under the SVG overlay. The SVG stays the source of truth for pan/zoom and
@@ -67,6 +71,8 @@ export function Basemap({ mode, view, size }: { mode: Exclude<Mode, 'schematic'>
       m = new maplibregl.Map({
         container: el.current!, style: styleFor(mode, theme), interactive: false, attributionControl: false,
         fadeDuration: 0, ...camera(), maxZoom: 18,
+        // ?lab keeps the frame readable so case-study captures can snapshot the map; the product doesn't pay for it
+        canvasContextAttributes: { preserveDrawingBuffer: LAB },
       })
     } catch { setFailed(true); return }
     m.on('style.load', () => { if (m.getStyle().sources.openmaptiles) mute(m, currentThemeOf(m)) })

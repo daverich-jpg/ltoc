@@ -302,7 +302,7 @@ kbd { font: var(--type-status); font-variant-numeric: tabular-nums; min-width: 1
 .muted { color: var(--text-3); }
 .dim { color: var(--text-2); }
 .small { font: var(--type-caption); }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 table.t { font: var(--type-body); width: 100%; border-collapse: collapse; }
 table.t th { font: var(--type-meta); letter-spacing: 0; text-align: left; color: var(--text-3); padding: 10px 12px 8px; background: transparent; border-bottom: 1px solid var(--line-soft); }
 table.t td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }

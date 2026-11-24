@@ -60,7 +60,7 @@ export function FlowsModule() {
 
       <div className="grid2" style={{ marginBottom: 12 }}>
         <section className="panel"><div className="panel-h"><h2>Unit states</h2><span className="small muted">each confirmed by radio, terminal or phone</span></div><div className="panel-b" style={{ overflowX: 'auto' }}>
-          <svg width="560" height="150" viewBox="0 0 560 150" role="img" aria-label="Unit state diagram">
+          <svg viewBox="0 0 560 150" style={{ width: '100%', maxWidth: 560, height: 'auto' }} role="img" aria-label="Unit state diagram">
             {['Available', 'Dispatched', 'Acknowledged', 'En route', 'On scene'].map((s, i) => <Box key={s} x={2 + i * 112} y={14} w={96} label={s} />)}
             {[0, 1, 2, 3].map(i => <Arrow key={i} d={`M${98 + i * 112} 30 L${112 + i * 112} 30`} />)}
             <Box x={450} y={96} w={96} label="Returning" /><Arrow d="M498 46 L498 94" />
@@ -71,7 +71,7 @@ export function FlowsModule() {
           <p className="small muted">The interface never shows a later state than the last confirmation. Dispatched means sent and not yet acknowledged; it is never shown as en route.</p>
         </div></section>
         <section className="panel"><div className="panel-h"><h2>Verification</h2><span className="small muted">confidence = number and recency of sources</span></div><div className="panel-b">
-          <svg width="460" height="150" viewBox="0 0 460 150" role="img" aria-label="Verification state diagram">
+          <svg viewBox="0 0 460 150" style={{ width: '100%', maxWidth: 460, height: 'auto' }} role="img" aria-label="Verification state diagram">
             <Box x={2} y={50} label="Unverified" /><Box x={130} y={50} label="Verifying" />
             <Box x={290} y={10} w={160} label="Verified" sub="camera · officer · 2nd source" /><Box x={290} y={92} w={160} label="Disproved" sub="reason recorded" tone="alt" />
             <Arrow d="M106 66 L128 66" /><Arrow d="M234 60 L288 36" /><Arrow d="M234 74 L288 112" />
